@@ -8,6 +8,8 @@
 
 ![Version](https://img.shields.io/badge/version-2.0.0-00e676?style=for-the-badge)
 ![Chrome](https://img.shields.io/badge/Chrome-Supported-4285F4?style=for-the-badge&logo=google-chrome&logoColor=white)
+![Edge](https://img.shields.io/badge/Edge-Supported-0078D7?style=for-the-badge&logo=microsoft-edge&logoColor=white)
+![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=for-the-badge)
 
 *Block ads, trackers, fingerprinting, crypto miners, cookie popups & annoyances.*
 *Zero acceptable ads. Zero compromise.*
@@ -35,6 +37,8 @@
 git clone https://github.com/roshanxcvi/zenith-adblocker-public.git
 ```
 Then load in Chrome: `chrome://extensions/` → Developer mode → Load unpacked → select folder
+
+> **Also works on Edge:** `edge://extensions/` → same steps
 
 ---
 
@@ -80,6 +84,40 @@ Blocks CoinHive, CryptoLoot, JSECoin, CoinImp and 15+ mining services.
 
 ---
 
+## 📁 Project Structure
+
+```
+zenith-adblocker/
+├── manifest.json              # Chrome MV3
+├── background.js              # Service worker — network blocking + filter engine
+├── content.js                 # Content script — all 6 protection modules
+├── popup/
+│   ├── popup.html
+│   ├── popup.css
+│   └── popup.js
+├── dashboard/
+│   ├── dashboard.html
+│   ├── dashboard.css
+│   └── dashboard.js
+├── rules/
+│   ├── filter-engine.js       # AdBlock filter list parser
+│   ├── default-filters.txt    # 500+ built-in rules
+│   └── static-rules.json     # 100 declarativeNetRequest rules
+├── modules/
+│   ├── tracker-learner.js     # Privacy Badger-style auto-detection
+│   └── filter-list-manager.js # 15 community filter lists
+├── icons/
+│   ├── icon-16.png
+│   ├── icon-48.png
+│   └── icon-128.png
+├── docs/
+│   └── index.html             # Marketing website (GitHub Pages)
+├── LICENSE
+└── README.md
+```
+
+---
+
 ## 💾 How It Works
 
 - **Network blocking:** Chrome's `declarativeNetRequest` API blocks ads at the network level before they load
@@ -100,11 +138,17 @@ Blocks CoinHive, CryptoLoot, JSECoin, CoinImp and 15+ mining services.
 
 ---
 
+## 📄 License
+
+GPL-3.0 — See [LICENSE](LICENSE) for details.
+
+---
+
 <div align="center">
 
 ### Made with ❤️ by [roshanxcvi](https://github.com/roshanxcvi)
 
-**Zenith AdBlocker v1.0.0** — Chrome
+**Zenith AdBlocker v2.0.0** — Chrome & Edge
 
 ⭐ **Star this repo if Zenith helps you browse ad-free!**
 
