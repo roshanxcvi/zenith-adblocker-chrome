@@ -21,7 +21,7 @@
 
 ### Method 1 — Download ZIP
 
-1. Go to (https://github.com/roshanxcvi/zenith-adblocker-chrome/releases/latest) → Download the ZIP
+1. Go to (https://github.com/roshanxcvi/zenith-adblocker-chrome) → Download the ZIP
 2. Unzip the file
 3. Open Chrome → go to `chrome://extensions/`
 4. Turn ON **Developer mode** (top-right toggle)
@@ -31,7 +31,7 @@
 ### Method 2 — Clone from GitHub
 
 ```bash
-git clone https://github.com/roshanxcvi/zenith-adblocker-public.git
+git clone https://github.com/roshanxcvi/zenith-adblocker-chrome.git
 ```
 Then load in Chrome: `chrome://extensions/` → Developer mode → Load unpacked → select folder
 
