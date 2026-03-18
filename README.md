@@ -12,7 +12,6 @@
 *Block ads, trackers, fingerprinting, crypto miners, cookie popups & annoyances.*
 *Zero acceptable ads. Zero compromise.*
 
-[**🌐 Visit Website**](https://roshanxcvi.github.io/zenith-adblocker-public/) · [**🐛 Report Bug**](https://github.com/roshanxcvi/zenith-adblocker-public/issues)
 
 </div>
 
