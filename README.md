@@ -42,7 +42,7 @@ Then load in Chrome: `chrome://extensions/` → Developer mode → Load unpacked
 
 | Feature | Zenith | uBlock Origin | AdBlock Plus | Ghostery | Privacy Badger |
 |---------|:------:|:------------:|:------------:|:--------:|:--------------:|
-| Ad Blocking | ✅ | ✅ | ⚠️* | ✅ | ❌ |
+| Ad Blocking | ✅ | ✅ | ⚠️ | ✅ | ❌ |
 | Tracker Blocking | ✅ | ✅ | ⚠️ | ✅ | ✅ |
 | Auto-Learning Trackers | ✅ | ❌ | ❌ | ❌ | ✅ |
 | Fingerprint Protection | ✅ | ❌ | ❌ | ❌ | ❌ |
