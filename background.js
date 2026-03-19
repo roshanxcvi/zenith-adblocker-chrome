@@ -25,6 +25,11 @@ let blockedLog = [];
 const MAX_LOG_SIZE = 500;
 let tabBlockedDomains = {};    // per-tab domain breakdown
 
+// "Since install" counter — like uBlock Origin
+// Stored in BOTH chrome.storage.local AND chrome.storage.sync
+// sync survives even if user clears all browsing data
+let sinceInstall = { totalBlocked: 0, installDate: null };
+
 // ——— INIT (runs every time service worker wakes up) ———
 async function init() {
   // 1. Load filters
@@ -46,12 +51,32 @@ async function init() {
   // 2. Restore PERMANENT data (survives browser close)
   try {
     const data = await chrome.storage.local.get([
-      'enabled', 'whitelist', 'globalStats', 'blockedLog'
+      'enabled', 'whitelist', 'globalStats', 'blockedLog', 'sinceInstall'
     ]);
     if (data.enabled !== undefined) isEnabled = data.enabled;
     if (data.whitelist) whitelist = data.whitelist;
     if (data.globalStats) globalStats = data.globalStats;
     if (data.blockedLog && Array.isArray(data.blockedLog)) blockedLog = data.blockedLog;
+    if (data.sinceInstall) sinceInstall = data.sinceInstall;
+  } catch (e) {}
+
+  // 2b. Restore sinceInstall from SYNC (survives clearing browsing data!)
+  // sync takes priority if it has a higher count (meaning local was cleared)
+  try {
+    const syncData = await chrome.storage.sync.get('sinceInstall');
+    if (syncData.sinceInstall) {
+      // Use whichever has the higher count (local might have been cleared)
+      if (syncData.sinceInstall.totalBlocked > sinceInstall.totalBlocked) {
+        sinceInstall = syncData.sinceInstall;
+        // Also restore globalStats totalBlocked if local was cleared
+        if (globalStats.totalBlocked === 0 && sinceInstall.totalBlocked > 0) {
+          globalStats.totalBlocked = sinceInstall.totalBlocked;
+        }
+      }
+      if (!sinceInstall.installDate && syncData.sinceInstall.installDate) {
+        sinceInstall.installDate = syncData.sinceInstall.installDate;
+      }
+    }
   } catch (e) {}
 
   // 3. Restore SESSION data (survives service worker restart, clears on browser close)
@@ -116,8 +141,13 @@ async function savePermanent() {
       blockedLog: blockedLog.slice(0, MAX_LOG_SIZE),
       enabled: isEnabled,
       whitelist,
+      sinceInstall,
       lastSave: Date.now()
     });
+  } catch (e) {}
+  // Also save sinceInstall to sync — this survives clearing browsing data
+  try {
+    await chrome.storage.sync.set({ sinceInstall });
   } catch (e) {}
 }
 
@@ -146,6 +176,7 @@ try {
       try {
         const hostname = new URL(info.request.url).hostname;
         globalStats.totalBlocked += 1;
+        sinceInstall.totalBlocked += 1;
         globalStats.perSite[hostname] = (globalStats.perSite[hostname] || 0) + 1;
         if (!tabBlockedDomains[tabId]) tabBlockedDomains[tabId] = {};
         if (!tabBlockedDomains[tabId][hostname]) tabBlockedDomains[tabId][hostname] = { count: 0, type: info.request.type || 'unknown' };
@@ -159,9 +190,14 @@ try {
 } catch (e) {}
 
 // ——— INSTALL ———
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
   try { chrome.contextMenus.create({ id: 'block-element', title: 'Block this element', contexts: ['all'] }); } catch (e) {}
   updateFilterLists();
+  // Record install date (only on first install, not updates)
+  if (details.reason === 'install') {
+    sinceInstall.installDate = new Date().toISOString();
+    savePermanent();
+  }
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
@@ -212,6 +248,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       enabled: isEnabled,
       blockedCount: stats[msg.tabId] || 0,
       totalBlocked: globalStats.totalBlocked,
+      sinceInstall,
       uniqueDomains: sorted.length,
       domains: sorted.slice(0, 15),
       categories: cats,
@@ -247,6 +284,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       try {
         const hostname = new URL(sender.tab.url).hostname;
         globalStats.totalBlocked += count;
+        sinceInstall.totalBlocked += count;
         globalStats.perSite[hostname] = (globalStats.perSite[hostname] || 0) + count;
         if (!tabBlockedDomains[tabId]) tabBlockedDomains[tabId] = {};
         if (!tabBlockedDomains[tabId][hostname]) tabBlockedDomains[tabId][hostname] = { count: 0, type: 'cosmetic' };
@@ -293,7 +331,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       exceptionCount: engine.exceptions.length,
       trackerLearner: trackerLearner.getStats(),
       learnedTrackers: trackerLearner.getLearnedTrackers().slice(0, 50),
-      filterListStats: filterListManager.getStats()
+      filterListStats: filterListManager.getStats(),
+      sinceInstall
     });
   }
 
