@@ -609,3 +609,269 @@
 ##div[aria-label="advertisement"]
 ##aside[class*="ad"]
 ##section[class*="ad-"]
+
+! ═══════════════════════════════════════════════════
+! ——— OBFUSGATED TEST FIX: Missing Ad Domains ———
+! ═══════════════════════════════════════════════════
+
+! Bing / Microsoft Ads
+||bingads.microsoft.com^
+
+! AppLovin
+||applovin.com^
+||d.applovin.com^
+||rt.applovin.com^
+
+! Vungle / Liftoff
+||api.vungle.com^
+||vungle.com^
+||liftoff.io^
+
+! Unity Ads
+||auction.unityads.unity3d.com^
+||webview.unityads.unity3d.com^
+||config.unityads.unity3d.com^
+||unityads.unity3d.com^
+
+! Yandex Ads & Tracking
+||metrika.yandex.ru^
+||adfox.yandex.ru^
+||adfstat.yandex.ru^
+||appmetrica.yandex.ru^
+||mc.yandex.ru^
+
+! Mobile Ad Networks
+||init.supersonicads.com^
+||api.fyber.com^
+||ironsource.mobi^
+||outcome-ssp.supersonicads.com^
+
+! Ad Exchanges & SSPs
+||smartyads.com^
+||apex.go.sonobi.com^
+||c.gumgum.com^
+||cdn.kargo.com^
+||sync.kargo.com^
+||pangleglobal.com^
+
+! YouTube Ads
+||s.youtube.com/api/stats^
+||redirector.googlevideo.com^
+
+! ═══════════════════════════════════════════════════
+! ——— OBFUSGATED TEST FIX: Missing Analytics ———
+! ═══════════════════════════════════════════════════
+
+||analytics.google.com^
+||click.googleanalytics.com^
+||tagmanager.google.com^
+||analytics.adobe.io^
+||quantcast.com^
+
+! ═══════════════════════════════════════════════════
+! ——— OBFUSGATED TEST FIX: Missing Tracking ———
+! ═══════════════════════════════════════════════════
+
+! Browser Fingerprinting
+||fingerprintjs.com^
+||fpjs.io^
+||api.fpjs.io^
+
+! Behavioral / Identity
+||cdn.siftscience.com^
+||permutive.com^
+||cdn.permutive.com^
+||onetag-sys.com^
+||pippio.com^
+||prod.uidapi.com^
+
+! Push / CleverTap
+||wzrkt.com^
+||clevertap-prod.com^
+
+! Branch.io short links (tracking)
+||bnc.lt^
+
+! ═══════════════════════════════════════════════════
+! ——— OBFUSGATED TEST FIX: Missing Social Trackers ———
+! ═══════════════════════════════════════════════════
+
+! Facebook / Meta (full block)
+||connect.facebook.net^
+||graph.facebook.com^
+||tr.facebook.com^
+
+! Instagram
+||graph.instagram.com^
+||i.instagram.com^
+
+! Snapchat
+||sc-static.net^
+||tr.snapchat.com^
+||sc-analytics.appspot.com^
+
+! LinkedIn
+||analytics.pointdrive.linkedin.com^
+
+! X (Twitter)
+||ads-api.x.com^
+
+! Reddit
+||events.reddit.com^
+||events.redditmedia.com^
+||d.reddit.com^
+
+! ByteDance / TikTok
+||mon.byteoversea.com^
+
+! Pinterest
+||ct.pinterest.com^
+||log.pinterest.com^
+||trk.pinterest.com^
+
+! Quora
+||pixel.quora.com^
+
+! Tumblr
+||px.srvcs.tumblr.com^
+
+! VK / Mail.ru
+||ads.vk.com^
+||ad.mail.ru^
+||top-fwz1.mail.ru^
+
+! ═══════════════════════════════════════════════════
+! ——— OBFUSGATED TEST FIX: OEM Vendor Telemetry ———
+! ═══════════════════════════════════════════════════
+
+! Apple
+||metrics.icloud.com^
+||api-adservices.apple.com^
+||books-analytics-events.apple.com^
+||weather-analytics-events.apple.com^
+||notes-analytics-events.apple.com^
+||metrics.mzstatic.com^
+||xp.apple.com^
+
+! Realme
+||iot-eu-logser.realme.com^
+||iot-logser.realme.com^
+||bdapi-ads.realmemobile.com^
+||bdapi-in-ads.realmemobile.com^
+
+! Oppo
+||adsfs.oppomobile.com^
+||adx.ads.oppomobile.com^
+||ck.ads.oppomobile.com^
+||data.ads.oppomobile.com^
+
+! OnePlus
+||open.oneplus.net^
+
+! Huawei
+||grs.hicloud.com^
+||logservice.hicloud.com^
+||logservice1.hicloud.com^
+||logbak.hicloud.com^
+
+! Xiaomi
+||api.ad.xiaomi.com^
+||data.mistat.xiaomi.com^
+||data.mistat.india.xiaomi.com^
+||data.mistat.rus.xiaomi.com^
+||sdkconfig.ad.xiaomi.com^
+||sdkconfig.ad.intl.xiaomi.com^
+||tracking.rus.miui.com^
+||tracking.miui.com^
+
+! Samsung
+||samsungads.com^
+||smetrics.samsung.com^
+||analytics-api.samsunghealthcn.com^
+||config.samsungads.com^
+
+! LG
+||us.info.lgsmartad.com^
+||ngfts.lge.com^
+||smartclip.net^
+
+! Microsoft telemetry
+||vortex-win.data.microsoft.com^
+
+! Amazon telemetry
+||device-metrics-us.amazon.com^
+||device-metrics-us-2.amazon.com^
+||mads-eu.amazon.com^
+
+! Google telemetry
+||app-measurement.com^
+||firebase-settings.crashlytics.com^
+
+! ═══════════════════════════════════════════════════
+! ——— OBFUSGATED TEST FIX: Consent Management ———
+! ═══════════════════════════════════════════════════
+
+||cdn.cookielaw.org^
+||geolocation.onetrust.com^
+||consent.cookiebot.com^
+||consentcdn.cookiebot.com^
+||cookiebot.com^
+||consent.trustarc.com^
+||sdk.privacy-center.org^
+||cdn.privacy-mgmt.com^
+||app.usercentrics.eu^
+
+! ═══════════════════════════════════════════════════
+! ——— OBFUSGATED TEST FIX: Video Ads ———
+! ═══════════════════════════════════════════════════
+
+||dai.google.com^
+||g.jwpsrv.com^
+||ssl.p.jwpcdn.com^
+||metrics.brightcove.com^
+||tremorhub.com^
+
+! ═══════════════════════════════════════════════════
+! ——— OBFUSGATED TEST FIX: Email & Chat Tracking ———
+! ═══════════════════════════════════════════════════
+
+||track.hubspot.com^
+||trackcmp.net^
+||widget.intercom.io^
+||js.driftt.com^
+
+! ═══════════════════════════════════════════════════
+! ——— OBFUSGATED TEST FIX: A/B Testing ———
+! ═══════════════════════════════════════════════════
+
+||cdn.dynamicyield.com^
+
+! ═══════════════════════════════════════════════════
+! ——— OBFUSGATED TEST FIX: Affiliate Networks ———
+! ═══════════════════════════════════════════════════
+
+||anrdoezrs.net^
+||dpbolvw.net^
+||tkqlhce.com^
+||shareasale.com^
+||shareasale-analytics.com^
+||click.linksynergy.com^
+||track.linksynergy.com^
+||impact.com^
+||d.impactradius-event.com^
+||api.impact.com^
+||awin1.com^
+||partnerstack.com^
+||api.partnerstack.com^
+||api.refersion.com^
+||s.skimresources.com^
+||t.skimresources.com^
+||go.skimresources.com^
+||redirector.skimresources.com^
+
+! ═══════════════════════════════════════════════════
+! ——— OBFUSGATED TEST FIX: Error Trackers ———
+! ═══════════════════════════════════════════════════
+
+||notify.bugsnag.com^
+||browser.sentry-cdn.com^
