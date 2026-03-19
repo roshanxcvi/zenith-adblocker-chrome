@@ -1,6 +1,11 @@
 /**
  * Zenith AdBlocker — Chrome Background Service Worker (MV3)
  * by roshanxcvi
+ * 
+ * PERSISTENCE FIX:
+ * - chrome.storage.local  → permanent data (survives browser close)
+ * - chrome.storage.session → tab data (survives service worker restart, clears on browser close)
+ * - All state restored on every service worker wake-up
  */
 
 import { FilterEngine } from './rules/filter-engine.js';
@@ -13,21 +18,21 @@ const filterListManager = new FilterListManager();
 
 // ——— STATE ———
 let isEnabled = true;
-let stats = {};
+let stats = {};                // per-tab blocked count
 let whitelist = [];
 let globalStats = { totalBlocked: 0, perSite: {} };
 let blockedLog = [];
 const MAX_LOG_SIZE = 500;
-let tabBlockedDomains = {};
+let tabBlockedDomains = {};    // per-tab domain breakdown
 
-// ——— INIT ———
+// ——— INIT (runs every time service worker wakes up) ———
 async function init() {
+  // 1. Load filters
   try {
     const resp = await fetch(chrome.runtime.getURL('rules/default-filters.txt'));
     engine.parse(await resp.text());
   } catch (e) { console.warn('[Zenith] Default filters load failed:', e); }
 
-  // Load cached filter lists
   try {
     await filterListManager.init();
     for (const list of filterListManager.getEnabledLists()) {
@@ -38,19 +43,41 @@ async function init() {
     }
   } catch (e) { console.warn('[Zenith] Filter list manager init failed:', e); }
 
-  // Restore saved state
+  // 2. Restore PERMANENT data (survives browser close)
   try {
-    const data = await chrome.storage.local.get(['enabled', 'whitelist', 'globalStats', 'blockedLog']);
+    const data = await chrome.storage.local.get([
+      'enabled', 'whitelist', 'globalStats', 'blockedLog'
+    ]);
     if (data.enabled !== undefined) isEnabled = data.enabled;
     if (data.whitelist) whitelist = data.whitelist;
     if (data.globalStats) globalStats = data.globalStats;
     if (data.blockedLog && Array.isArray(data.blockedLog)) blockedLog = data.blockedLog;
   } catch (e) {}
 
+  // 3. Restore SESSION data (survives service worker restart, clears on browser close)
+  try {
+    // Allow session storage to hold more data
+    if (chrome.storage.session.setAccessLevel) {
+      await chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' });
+    }
+    const session = await chrome.storage.session.get(['stats', 'tabBlockedDomains']);
+    if (session.stats) stats = session.stats;
+    if (session.tabBlockedDomains) tabBlockedDomains = session.tabBlockedDomains;
+  } catch (e) { console.warn('[Zenith] Session restore failed:', e); }
+
   await trackerLearner.load();
   await syncDynamicRules();
 
-  console.log(`[Zenith] Ready — ${engine.networkFilters.length} network rules, ${engine.cosmeticFilters.length} cosmetic`);
+  // Restore badges for all open tabs
+  try {
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+      const count = stats[tab.id] || 0;
+      if (count > 0) updateBadge(tab.id, count);
+    }
+  } catch (e) {}
+
+  console.log(`[Zenith] Ready — ${engine.networkFilters.length} network, ${engine.cosmeticFilters.length} cosmetic, totalBlocked: ${globalStats.totalBlocked}`);
 }
 
 // ——— DYNAMIC RULES ———
@@ -80,14 +107,34 @@ async function syncDynamicRules() {
   } catch (e) { console.warn('[Zenith] Dynamic rules sync failed:', e); }
 }
 
-// ——— SAVE DATA ———
-async function persistAllData() {
+// ——— SAVE PERMANENT DATA (survives browser close) ———
+async function savePermanent() {
   try {
-    await chrome.storage.local.set({ globalStats, blockedLog: blockedLog.slice(0, MAX_LOG_SIZE), lastActiveTimestamp: Date.now() });
+    await chrome.storage.local.set({
+      globalStats,
+      blockedLog: blockedLog.slice(0, MAX_LOG_SIZE),
+      enabled: isEnabled,
+      whitelist,
+      lastSave: Date.now()
+    });
   } catch (e) {}
 }
 
+// ——— SAVE SESSION DATA (survives service worker restart) ———
+async function saveSession() {
+  try {
+    await chrome.storage.session.set({ stats, tabBlockedDomains });
+  } catch (e) {}
+}
+
+// ——— SAVE ALL ———
+async function saveAll() {
+  await savePermanent();
+  await saveSession();
+}
+
 // ——— TRACK BLOCKED REQUESTS ———
+// onRuleMatchedDebug only works in dev mode — but we track anyway as a bonus
 try {
   if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
     chrome.declarativeNetRequest.onRuleMatchedDebug.addListener((info) => {
@@ -104,7 +151,7 @@ try {
         tabBlockedDomains[tabId][hostname].count += 1;
         blockedLog.unshift({ url: info.request.url, domain: hostname, type: info.request.type || 'unknown', timestamp: Date.now(), tabId });
         if (blockedLog.length > MAX_LOG_SIZE) blockedLog = blockedLog.slice(0, MAX_LOG_SIZE);
-        if (globalStats.totalBlocked % 25 === 0) persistAllData();
+        if (globalStats.totalBlocked % 10 === 0) saveAll();
       } catch (e) {}
     });
   }
@@ -122,10 +169,33 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
 // ——— MESSAGE HANDLER ———
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.type === 'CHECK_URL') { sendResponse({ blocked: isEnabled && engine.shouldBlock(msg.url, msg.sourceUrl) }); }
-  if (msg.type === 'GET_COSMETIC_FILTERS') { sendResponse({ selectors: engine.getCosmeticSelectors(msg.hostname) }); }
-  if (msg.type === 'GET_STATE') { sendResponse({ enabled: isEnabled, blockedCount: stats[sender.tab?.id] || 0, totalBlocked: globalStats.totalBlocked, whitelist }); }
-  if (msg.type === 'GET_TAB_STATS') { sendResponse({ enabled: isEnabled, blockedCount: stats[msg.tabId] || 0, totalBlocked: globalStats.totalBlocked, whitelist }); }
+
+  if (msg.type === 'CHECK_URL') {
+    sendResponse({ blocked: isEnabled && engine.shouldBlock(msg.url, msg.sourceUrl) });
+  }
+
+  if (msg.type === 'GET_COSMETIC_FILTERS') {
+    sendResponse({ selectors: engine.getCosmeticSelectors(msg.hostname) });
+  }
+
+  if (msg.type === 'GET_STATE') {
+    const tabId = sender.tab?.id;
+    sendResponse({
+      enabled: isEnabled,
+      blockedCount: stats[tabId] || 0,
+      totalBlocked: globalStats.totalBlocked,
+      whitelist
+    });
+  }
+
+  if (msg.type === 'GET_TAB_STATS') {
+    sendResponse({
+      enabled: isEnabled,
+      blockedCount: stats[msg.tabId] || 0,
+      totalBlocked: globalStats.totalBlocked,
+      whitelist
+    });
+  }
 
   if (msg.type === 'GET_POPUP_OVERVIEW') {
     const doms = tabBlockedDomains[msg.tabId] || {};
@@ -137,15 +207,39 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       else if (/facebook|twitter|linkedin|instagram|snap\.licdn|pixel\.facebook/.test(domain)) cats.social++;
       else cats.other++;
     }
-    sendResponse({ enabled: isEnabled, blockedCount: stats[msg.tabId] || 0, totalBlocked: globalStats.totalBlocked, uniqueDomains: sorted.length, domains: sorted.slice(0, 15), categories: cats, whitelist });
+    sendResponse({
+      enabled: isEnabled,
+      blockedCount: stats[msg.tabId] || 0,
+      totalBlocked: globalStats.totalBlocked,
+      uniqueDomains: sorted.length,
+      domains: sorted.slice(0, 15),
+      categories: cats,
+      whitelist
+    });
   }
 
-  if (msg.type === 'TOGGLE') { isEnabled = !isEnabled; chrome.storage.local.set({ enabled: isEnabled }); sendResponse({ enabled: isEnabled }); }
-  if (msg.type === 'ADD_WHITELIST') { const d = msg.domain.replace(/^www\./, ''); if (!whitelist.includes(d)) whitelist.push(d); chrome.storage.local.set({ whitelist }); sendResponse({ whitelist }); }
-  if (msg.type === 'REMOVE_WHITELIST') { whitelist = whitelist.filter(d => d !== msg.domain); chrome.storage.local.set({ whitelist }); sendResponse({ whitelist }); }
+  if (msg.type === 'TOGGLE') {
+    isEnabled = !isEnabled;
+    savePermanent();
+    sendResponse({ enabled: isEnabled });
+  }
+
+  if (msg.type === 'ADD_WHITELIST') {
+    const d = msg.domain.replace(/^www\./, '');
+    if (!whitelist.includes(d)) whitelist.push(d);
+    savePermanent();
+    sendResponse({ whitelist });
+  }
+
+  if (msg.type === 'REMOVE_WHITELIST') {
+    whitelist = whitelist.filter(d => d !== msg.domain);
+    savePermanent();
+    sendResponse({ whitelist });
+  }
 
   if (msg.type === 'REPORT_BLOCKED') {
-    const tabId = sender.tab?.id; const count = msg.count || 1;
+    const tabId = sender.tab?.id;
+    const count = msg.count || 1;
     if (tabId) {
       stats[tabId] = (stats[tabId] || 0) + count;
       updateBadge(tabId, stats[tabId]);
@@ -156,12 +250,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if (!tabBlockedDomains[tabId]) tabBlockedDomains[tabId] = {};
         if (!tabBlockedDomains[tabId][hostname]) tabBlockedDomains[tabId][hostname] = { count: 0, type: 'cosmetic' };
         tabBlockedDomains[tabId][hostname].count += count;
-        if (globalStats.totalBlocked % 25 === 0) persistAllData();
+        // Save session data so tab counts survive service worker restart
+        if (globalStats.totalBlocked % 5 === 0) saveAll();
       } catch (e) {}
     }
   }
 
-  if (msg.type === 'RESET_STATS') { globalStats = { totalBlocked: 0, perSite: {} }; stats = {}; blockedLog = []; tabBlockedDomains = {}; chrome.storage.local.set({ globalStats, blockedLog: [] }); sendResponse({ success: true }); }
+  if (msg.type === 'RESET_STATS') {
+    globalStats = { totalBlocked: 0, perSite: {} };
+    stats = {};
+    blockedLog = [];
+    tabBlockedDomains = {};
+    saveAll();
+    sendResponse({ success: true });
+  }
 
   if (msg.type === 'GET_DASHBOARD_DATA') {
     const topSites = Object.entries(globalStats.perSite).sort((a, b) => b[1] - a[1]).slice(0, 50);
@@ -178,24 +280,71 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       else if (/adroll|viglink|liveintent|advertising\.com|adform|adsrvr/.test(d)) cat = 'Ad Networks';
       categories[cat] = (categories[cat] || 0) + 1;
     }
-    sendResponse({ enabled: isEnabled, totalBlocked: globalStats.totalBlocked, topSites, blockedLog: blockedLog.slice(0, 200), categories, whitelist, networkRuleCount: engine.networkFilters.length, cosmeticRuleCount: engine.cosmeticFilters.length, exceptionCount: engine.exceptions.length, trackerLearner: trackerLearner.getStats(), learnedTrackers: trackerLearner.getLearnedTrackers().slice(0, 50), filterListStats: filterListManager.getStats() });
+    sendResponse({
+      enabled: isEnabled,
+      totalBlocked: globalStats.totalBlocked,
+      topSites,
+      blockedLog: blockedLog.slice(0, 200),
+      categories,
+      whitelist,
+      networkRuleCount: engine.networkFilters.length,
+      cosmeticRuleCount: engine.cosmeticFilters.length,
+      exceptionCount: engine.exceptions.length,
+      trackerLearner: trackerLearner.getStats(),
+      learnedTrackers: trackerLearner.getLearnedTrackers().slice(0, 50),
+      filterListStats: filterListManager.getStats()
+    });
   }
 
-  if (msg.type === 'GET_PRO_SETTINGS') { chrome.storage.local.get('proSettings').then(d => sendResponse(d.proSettings || { adBlocking: true, fingerprintProtection: true, cookieAutoReject: true, annoyanceBlocking: true, minerBlocking: true, antiAdblock: true })); }
-  if (msg.type === 'SET_PRO_SETTINGS') { chrome.storage.local.set({ proSettings: msg.settings }); sendResponse({ success: true }); }
-  if (msg.type === 'ALLOW_LEARNED_TRACKER') { trackerLearner.allowDomain(msg.domain); sendResponse({ success: true }); }
-  if (msg.type === 'UPDATE_ALL_FILTER_LISTS') { updateFilterLists().then(() => sendResponse({ success: true })); }
+  if (msg.type === 'GET_PRO_SETTINGS') {
+    chrome.storage.local.get('proSettings').then(d => {
+      sendResponse(d.proSettings || {
+        adBlocking: true, fingerprintProtection: true, cookieAutoReject: true,
+        annoyanceBlocking: true, minerBlocking: true, antiAdblock: true
+      });
+    });
+  }
 
-  return true;
+  if (msg.type === 'SET_PRO_SETTINGS') {
+    chrome.storage.local.set({ proSettings: msg.settings });
+    sendResponse({ success: true });
+  }
+
+  if (msg.type === 'ALLOW_LEARNED_TRACKER') {
+    trackerLearner.allowDomain(msg.domain);
+    sendResponse({ success: true });
+  }
+
+  if (msg.type === 'UPDATE_ALL_FILTER_LISTS') {
+    updateFilterLists().then(() => sendResponse({ success: true }));
+  }
+
+  return true; // keep message channel open for async responses
 });
 
 // ——— BADGE ———
 function updateBadge(tabId, count) {
-  try { chrome.action.setBadgeText({ text: count > 999 ? '999+' : String(count), tabId }); chrome.action.setBadgeBackgroundColor({ color: '#e74c3c', tabId }); } catch (e) {}
+  try {
+    chrome.action.setBadgeText({ text: count > 999 ? '999+' : String(count), tabId });
+    chrome.action.setBadgeBackgroundColor({ color: '#e74c3c', tabId });
+  } catch (e) {}
 }
 
-chrome.webNavigation.onCommitted.addListener((d) => { if (d.frameId === 0) { stats[d.tabId] = 0; tabBlockedDomains[d.tabId] = {}; updateBadge(d.tabId, 0); } });
-chrome.tabs.onRemoved.addListener((id) => { delete stats[id]; delete tabBlockedDomains[id]; });
+// ——— TAB LIFECYCLE ———
+chrome.webNavigation.onCommitted.addListener((d) => {
+  if (d.frameId === 0) {
+    stats[d.tabId] = 0;
+    tabBlockedDomains[d.tabId] = {};
+    updateBadge(d.tabId, 0);
+    saveSession(); // save cleared tab state
+  }
+});
+
+chrome.tabs.onRemoved.addListener((id) => {
+  delete stats[id];
+  delete tabBlockedDomains[id];
+  saveSession();
+});
 
 // ——— FILTER LIST UPDATE ———
 async function updateFilterLists() {
@@ -204,16 +353,24 @@ async function updateFilterLists() {
     const defResp = await fetch(chrome.runtime.getURL('rules/default-filters.txt'));
     engine.parse(await defResp.text());
     const results = await filterListManager.updateAll();
-    for (const r of results) { if (r.success) { const t = await filterListManager.getCachedList(r.id); if (t) engine.parse(t); } }
+    for (const r of results) {
+      if (r.success) {
+        const t = await filterListManager.getCachedList(r.id);
+        if (t) engine.parse(t);
+      }
+    }
     await syncDynamicRules();
     console.log(`[Zenith] Lists updated — ${engine.networkFilters.length} rules`);
   } catch (e) { console.warn('[Zenith] Update failed:', e); }
 }
 
-// ——— ALARMS ———
+// ——— ALARMS (keep service worker alive + auto-save) ———
+chrome.alarms.create('autoSave', { periodInMinutes: 1 });
 chrome.alarms.create('updateFilters', { periodInMinutes: 1440 });
-chrome.alarms.create('autoSave', { periodInMinutes: 5 });
-chrome.alarms.onAlarm.addListener((a) => { if (a.name === 'updateFilters') updateFilterLists(); if (a.name === 'autoSave') persistAllData(); });
+chrome.alarms.onAlarm.addListener((a) => {
+  if (a.name === 'autoSave') saveAll();
+  if (a.name === 'updateFilters') updateFilterLists();
+});
 
 // ——— START ———
 init();
