@@ -753,3 +753,39 @@ body::after {
     display: none;
   }
 }
+
+/* ——— SINCE INSTALL BANNER ——— */
+.since-install-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, rgba(0,230,118,0.06) 0%, rgba(0,200,83,0.03) 100%);
+  border: 1px solid rgba(0,230,118,0.18);
+  border-radius: 12px;
+  padding: 14px 20px;
+  margin-bottom: 16px;
+}
+.sib-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sib-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary, #8b949e);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+.sib-date {
+  font-size: 11px;
+  color: var(--text-tertiary, #484f58);
+  margin-top: 2px;
+}
+.sib-count {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 28px;
+  font-weight: 800;
+  color: #00e676;
+  letter-spacing: -1px;
+}
