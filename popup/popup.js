@@ -41,6 +41,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   totalBlocked.textContent = fmt(data.totalBlocked || 0);
   domainsTotal.textContent = data.uniqueDomains || 0;
 
+  // Since install counter (like uBlock Origin)
+  const siCount = document.getElementById('since-install-count');
+  const siDate = document.getElementById('since-install-date');
+  if (data.sinceInstall) {
+    siCount.textContent = fmtFull(data.sinceInstall.totalBlocked || 0);
+    if (data.sinceInstall.installDate) {
+      const d = new Date(data.sinceInstall.installDate);
+      const now = new Date();
+      const days = Math.floor((now - d) / 86400000);
+      const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      siDate.textContent = `Since ${dateStr} — ${days} day${days !== 1 ? 's' : ''} ago`;
+    }
+  }
+
   if (!data.enabled) document.body.classList.add('disabled');
 
   // Category bar
@@ -69,6 +83,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
     if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
     return String(n);
+  }
+
+  function fmtFull(n) {
+    return n.toLocaleString('en-US');
   }
 
   function getDomainCategory(d) {
