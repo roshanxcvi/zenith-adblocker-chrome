@@ -20,6 +20,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const whitelistEmpty = document.getElementById('whitelist-empty');
   const refreshBtn = document.getElementById('refresh-btn');
   const resetBtn = document.getElementById('reset-btn');
+  const sibCount = document.getElementById('sib-count');
+  const sibDate = document.getElementById('sib-date');
 
   // Category config
   const CAT_CONFIG = {
@@ -154,6 +156,7 @@ document.addEventListener('DOMContentLoaded', () => {
   async function loadDashboard() {
     try {
       const data = await chrome.runtime.sendMessage({ type: 'GET_DASHBOARD_DATA' });
+      if (!data) return;
 
       // Toggle state
       masterToggle.checked = data.enabled;
@@ -164,6 +167,18 @@ document.addEventListener('DOMContentLoaded', () => {
       statRules.textContent = fmt(data.networkRuleCount + data.cosmeticRuleCount);
       statSites.textContent = fmt(data.topSites.length);
       statWhitelistCount.textContent = data.whitelist.length;
+
+      // Since install banner
+      if (data.sinceInstall && sibCount) {
+        sibCount.textContent = data.sinceInstall.totalBlocked.toLocaleString('en-US');
+        if (data.sinceInstall.installDate && sibDate) {
+          const d = new Date(data.sinceInstall.installDate);
+          const now = new Date();
+          const days = Math.floor((now - d) / 86400000);
+          const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          sibDate.textContent = 'Since ' + dateStr + ' — ' + days + ' day' + (days !== 1 ? 's' : '') + ' ago';
+        }
+      }
 
       // Sections
       renderCategories(data.categories);
