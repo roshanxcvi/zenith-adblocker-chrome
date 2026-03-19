@@ -60,9 +60,10 @@ async function init() {
     if (chrome.storage.session.setAccessLevel) {
       await chrome.storage.session.setAccessLevel({ accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS' });
     }
-    const session = await chrome.storage.session.get(['stats', 'tabBlockedDomains']);
+    const session = await chrome.storage.session.get(['stats', 'tabBlockedDomains', 'tabUrls']);
     if (session.stats) stats = session.stats;
     if (session.tabBlockedDomains) tabBlockedDomains = session.tabBlockedDomains;
+    if (session.tabUrls) tabUrls = session.tabUrls;
   } catch (e) { console.warn('[Zenith] Session restore failed:', e); }
 
   await trackerLearner.load();
@@ -123,7 +124,7 @@ async function savePermanent() {
 // ——— SAVE SESSION DATA (survives service worker restart) ———
 async function saveSession() {
   try {
-    await chrome.storage.session.set({ stats, tabBlockedDomains });
+    await chrome.storage.session.set({ stats, tabBlockedDomains, tabUrls });
   } catch (e) {}
 }
 
@@ -331,18 +332,36 @@ function updateBadge(tabId, count) {
 }
 
 // ——— TAB LIFECYCLE ———
+// Track current hostname per tab to avoid resetting on same-page navigations
+let tabUrls = {};
+
 chrome.webNavigation.onCommitted.addListener((d) => {
-  if (d.frameId === 0) {
-    stats[d.tabId] = 0;
-    tabBlockedDomains[d.tabId] = {};
-    updateBadge(d.tabId, 0);
-    saveSession(); // save cleared tab state
-  }
+  if (d.frameId !== 0) return; // ignore iframes
+
+  // Only reset on real navigations, not SPA pushState or reloads
+  const resetTypes = ['typed', 'auto_bookmark', 'generated', 'keyword', 'keyword_generated'];
+  const isNewNavigation = resetTypes.includes(d.transitionType) || d.transitionType === 'link';
+
+  if (!isNewNavigation) return;
+
+  // Only reset if the hostname actually changed
+  try {
+    const newHost = new URL(d.url).hostname;
+    const oldHost = tabUrls[d.tabId];
+    if (oldHost && oldHost === newHost) return; // same site, don't reset
+    tabUrls[d.tabId] = newHost;
+  } catch (e) {}
+
+  stats[d.tabId] = 0;
+  tabBlockedDomains[d.tabId] = {};
+  updateBadge(d.tabId, 0);
+  saveSession();
 });
 
 chrome.tabs.onRemoved.addListener((id) => {
   delete stats[id];
   delete tabBlockedDomains[id];
+  delete tabUrls[id];
   saveSession();
 });
 
