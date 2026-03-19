@@ -263,3 +263,42 @@ body.disabled .prot-badge.active { background: #21262d; color: #484f58; border-c
   letter-spacing: 0.8px;
   text-transform: uppercase;
 }
+
+/* ——— SINCE INSTALL BANNER ——— */
+.since-install {
+  background: linear-gradient(135deg, rgba(0,230,118,0.06) 0%, rgba(0,200,83,0.03) 100%);
+  border: 1px solid rgba(0,230,118,0.15);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+}
+.si-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.si-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.si-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.si-count {
+  font-family: 'Consolas', 'SF Mono', monospace;
+  font-size: 16px;
+  font-weight: 800;
+  color: #00e676;
+  letter-spacing: -0.5px;
+}
+.si-date {
+  font-size: 9px;
+  color: #484f58;
+  margin-top: 3px;
+  padding-left: 20px;
+}
