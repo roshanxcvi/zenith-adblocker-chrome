@@ -34,6 +34,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     tabId: tab.id
   });
 
+  // Safety check — if service worker was dead, data might be null
+  if (!data) {
+    blockedCount.textContent = '—';
+    totalBlocked.textContent = '—';
+    return;
+  }
+
   // Populate stats
   toggle.checked = data.enabled;
   blockedCount.textContent = data.blockedCount || 0;
