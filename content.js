@@ -2,13 +2,7 @@
  * Zenith AdBlocker — Content Script (Chrome Only)
  * by roshanxcvi
  *
- * ULTRA-LIGHTWEIGHT DESIGN:
- * - CSS stylesheet hides ALL ads (zero JS overhead per frame)
- * - NO MutationObserver for ad counting (biggest perf killer)
- * - Count hidden elements only TWICE: on load + 3 sec after
- * - Miner observer only watches <head> not entire DOM
- * - Annoyances + anti-adblock are CSS-only
- * - Total JS work on YouTube: near zero
+ * YouTube-safe: all ad selectors scoped to prevent hiding header/navigation
  */
 
 (async function () {
@@ -39,6 +33,8 @@
     antiAb: settings.antiAdblock !== false,
   };
 
+  const isYouTube = hostname.includes('youtube.com');
+
   // ═══════════════════════════════════
   // FINGERPRINT PROTECTION
   // ═══════════════════════════════════
@@ -52,7 +48,7 @@
   }
 
   // ═══════════════════════════════════
-  // AD BLOCKING — 100% CSS, minimal JS
+  // AD BLOCKING
   // ═══════════════════════════════════
   if (F.ads) {
     let selectors = [];
@@ -61,44 +57,101 @@
       if (r && r.selectors) selectors = r.selectors;
     } catch (e) {}
 
-    const BUILTIN = [
-      'ins.adsbygoogle','[id^="google_ads"]','[id^="div-gpt-ad"]','[data-google-query-id]',
-      '[data-ad-slot]','[data-ad-client]',
-      '.ad-banner','.ad-container','.ad-wrapper','.ad-slot','.ad-unit','.ad-placement',
-      '.ad-leaderboard','.ad-sidebar','.ad-footer','.ad-header','.ad-box',
-      '.advertisement','.advertise',
-      '.sponsored-content','.sponsored','.promoted-post','.promoted',
-      '[id*="taboola"]','[class*="taboola"]','[id*="outbrain"]','[class*="outbrain"]','.OUTBRAIN',
-      '.dfp-ad','[class*="gpt-ad"]','[data-native-ad]',
-      '.sidebar-ad','.sticky-ad','.floating-ad','.interstitial-ad','.overlay-ad',
-      'iframe[src*="doubleclick"]','iframe[src*="googlesyndication"]','iframe[src*="amazon-adsystem"]',
+    // Generic selectors — SAFE on all sites including YouTube
+    // These are precise enough to never match navigation/header elements
+    const GENERIC = [
+      'ins.adsbygoogle',
+      '[id^="google_ads"]',
+      '[id^="div-gpt-ad"]',
+      '[data-google-query-id]',
+      '[data-ad-slot]',
+      '[data-ad-client]',
+      '[data-native-ad]',
+      '[class*="gpt-ad"]',
+      '.dfp-ad',
+      'iframe[src*="doubleclick"]',
+      'iframe[src*="googlesyndication"]',
+      'iframe[src*="amazon-adsystem"]',
       'iframe[id*="google_ads"]',
+      '.OUTBRAIN',
+      '[id*="taboola"]',
+      '[class*="taboola"]',
+      '[id*="outbrain"]',
+      '[class*="outbrain"]',
     ];
 
-    const allSel = [...new Set([...selectors, ...BUILTIN])];
+    // These selectors are ONLY applied on non-YouTube sites
+    // They're too generic and can match YouTube UI elements
+    const NON_YOUTUBE_ONLY = [
+      '.ad-banner','.ad-container','.ad-wrapper','.ad-slot','.ad-unit',
+      '.ad-placement','.ad-leaderboard','.ad-sidebar','.ad-footer','.ad-box',
+      '.advertisement','.advertise',
+      '.sponsored-content','.sponsored','.promoted-post','.promoted',
+      '.sidebar-ad','.sticky-ad','.floating-ad','.interstitial-ad','.overlay-ad',
+    ];
 
-    // CSS does ALL the hiding — zero JS cost per frame
+    let allSel = [...new Set([...selectors, ...GENERIC])];
+    if (!isYouTube) {
+      allSel = [...new Set([...allSel, ...NON_YOUTUBE_ONLY])];
+    }
+
+    // Build CSS
+    let css = allSel.map(s =>
+      `${s}{display:none!important;visibility:hidden!important;height:0!important;overflow:hidden!important}`
+    ).join('\n');
+
+    // YouTube-specific: SCOPED to safe containers only
+    if (isYouTube) {
+      css += `
+/* YouTube video ad overlays — inside player only */
+.ytp-ad-module{display:none!important}
+.ytp-ad-overlay-slot{display:none!important}
+.ytp-ad-overlay-container{display:none!important}
+.ytp-ad-text-overlay{display:none!important}
+.ytp-ad-message-slot{display:none!important}
+.ytp-ad-image-overlay{display:none!important}
+.video-ads{display:none!important}
+
+/* YouTube feed ads — scoped to content area, NOT header */
+#contents ytd-ad-slot-renderer{display:none!important}
+#contents ytd-promoted-sparkles-web-renderer{display:none!important}
+#contents ytd-promoted-video-renderer{display:none!important}
+#contents ytd-in-feed-ad-layout-renderer{display:none!important}
+#contents ytd-display-ad-renderer{display:none!important}
+#related ytd-promoted-sparkles-web-renderer{display:none!important}
+#related ytd-ad-slot-renderer{display:none!important}
+#below ytd-ad-slot-renderer{display:none!important}
+
+/* YouTube player-area ads only */
+#player-ads{display:none!important}
+#player ytd-player-legacy-desktop-watch-ads-renderer{display:none!important}
+ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-ads"]{display:none!important}
+
+/* YouTube masthead ad (NOT #masthead which is the real header) */
+#masthead-ad{display:none!important}
+ytd-video-masthead-ad-v3-renderer{display:none!important}
+
+/* Promo bars inside content */
+#content .ytd-mealbar-promo-renderer{display:none!important}
+#content ytd-primetime-promo-renderer{display:none!important}
+`;
+    }
+
     try {
       const style = document.createElement('style');
       style.id = 'zenith-hide';
-      style.textContent = allSel.map(s =>
-        `${s}{display:none!important;visibility:hidden!important;height:0!important;overflow:hidden!important}`
-      ).join('\n');
+      style.textContent = css;
       (document.head || document.documentElement)?.appendChild(style);
     } catch (e) {}
 
-    // Count hidden elements only TWICE (not continuously)
-    // This is just for the badge number — CSS already hid everything
+    // Count for badge (twice only)
     const countSelector = allSel.join(',');
-
     function countOnce() {
       try {
         const count = document.querySelectorAll(countSelector).length;
         if (count > 0) send({ type: 'REPORT_BLOCKED', count });
       } catch (e) {}
     }
-
-    // Count after DOM is ready, and once more after dynamic content loads
     if (document.readyState === 'complete') {
       setTimeout(countOnce, 500);
       setTimeout(countOnce, 3000);
@@ -108,13 +161,53 @@
         setTimeout(countOnce, 3000);
       });
     }
+
+    // YouTube ad killer — only on youtube.com
+    if (isYouTube) {
+      function killYouTubeAd() {
+        let killed = 0;
+        // Click skip button
+        const skip = document.querySelector('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button');
+        if (skip) { skip.click(); killed++; }
+        // Skip to end of ad video
+        const video = document.querySelector('video.html5-main-video');
+        if (video && document.querySelector('.ad-showing')) {
+          if (video.duration > 0 && video.currentTime < video.duration - 0.5) {
+            video.currentTime = video.duration;
+          }
+          video.muted = true;
+          killed++;
+        }
+        // Close overlay
+        const close = document.querySelector('.ytp-ad-overlay-close-button');
+        if (close) { close.click(); killed++; }
+        if (killed > 0) send({ type: 'REPORT_BLOCKED', count: killed });
+      }
+
+      function startYT() {
+        const player = document.querySelector('#movie_player');
+        if (!player) { setTimeout(startYT, 2000); return; }
+        // Watch ONLY player class changes — not subtree
+        const obs = new MutationObserver(() => {
+          if (player.classList.contains('ad-showing')) killYouTubeAd();
+        });
+        obs.observe(player, { attributes: true, attributeFilter: ['class'] });
+        // Backup check every 1.5 seconds
+        setInterval(() => {
+          if (document.querySelector('.ad-showing')) killYouTubeAd();
+        }, 1500);
+      }
+
+      if (document.readyState === 'complete') setTimeout(startYT, 1000);
+      else window.addEventListener('load', () => setTimeout(startYT, 1000));
+    }
   }
 
   // ═══════════════════════════════════
   // COOKIE AUTO-REJECT
   // ═══════════════════════════════════
   if (F.cookie) {
-    const REJECT_BTNS = [
+    const BTNS = [
       '#onetrust-reject-all-handler','#CybotCookiebotDialogBodyButtonDecline',
       '#didomi-notice-disagree-button','.qc-cmp2-summary-buttons button[mode="secondary"]',
       'button[aria-label*="reject"]','button[aria-label*="deny"]','button[aria-label*="decline"]',
@@ -127,28 +220,23 @@
     ];
     const RE = [/^reject\s*(all)?$/i,/^deny\s*(all)?$/i,/^decline\s*(all)?$/i,/^no,?\s*thanks?$/i,/^only\s*(essential|necessary)/i];
 
-    function rejectCookies() {
-      for (const sel of REJECT_BTNS) {
-        try { const b = document.querySelector(sel); if (b && b.offsetParent !== null) { b.click(); return; } } catch (e) {}
+    function reject() {
+      for (const s of BTNS) { try { const b = document.querySelector(s); if (b && b.offsetParent !== null) { b.click(); return; } } catch(e){} }
+      for (const b of document.querySelectorAll('button, a[role="button"]')) {
+        const t = (b.textContent||'').trim(); if (t.length > 50) continue;
+        if (RE.some(r => r.test(t)) && b.offsetParent !== null) { b.click(); return; }
       }
-      for (const btn of document.querySelectorAll('button, a[role="button"]')) {
-        const t = (btn.textContent || '').trim();
-        if (t.length > 50) continue;
-        if (RE.some(r => r.test(t)) && btn.offsetParent !== null) { btn.click(); return; }
-      }
-      for (const sel of BANNERS) { try { const el = document.querySelector(sel); if (el) el.style.setProperty('display','none','important'); } catch (e) {} }
-      try { document.body.style.overflow = ''; document.documentElement.style.overflow = ''; } catch (e) {}
+      for (const s of BANNERS) { try { const e = document.querySelector(s); if (e) e.style.setProperty('display','none','important'); } catch(e){} }
+      try { document.body.style.overflow=''; document.documentElement.style.overflow=''; } catch(e){}
     }
-
-    const schedule = () => { setTimeout(rejectCookies, 800); setTimeout(rejectCookies, 3000); };
-    if (document.readyState === 'complete') schedule();
-    else window.addEventListener('load', schedule);
+    const go = () => { setTimeout(reject, 800); setTimeout(reject, 3000); };
+    if (document.readyState === 'complete') go(); else window.addEventListener('load', go);
   }
 
   // ═══════════════════════════════════
-  // ANNOYANCE BLOCKING — CSS only
+  // ANNOYANCE BLOCKING — CSS only, skip on YouTube
   // ═══════════════════════════════════
-  if (F.annoy) {
+  if (F.annoy && !isYouTube) {
     try {
       const style = document.createElement('style');
       style.id = 'zenith-annoy';
@@ -161,32 +249,31 @@
         '[class*="app-banner"]','[class*="smart-banner"]','[class*="sticky-video"]',
       ].map(s => `${s}{display:none!important}`).join('\n');
       (document.head || document.documentElement)?.appendChild(style);
-    } catch (e) {}
-    try { if (typeof Notification !== 'undefined') Notification.requestPermission = () => Promise.resolve('denied'); } catch (e) {}
+    } catch(e){}
+  }
+  if (F.annoy) {
+    try { if (typeof Notification !== 'undefined') Notification.requestPermission = () => Promise.resolve('denied'); } catch(e){}
   }
 
   // ═══════════════════════════════════
-  // CRYPTO MINER BLOCKING — lightweight
-  // Only watches <head> for script tags, not entire DOM
+  // CRYPTO MINER — watches <head> only
   // ═══════════════════════════════════
   if (F.miner) {
-    const MINERS = ['coinhive.com','coin-hive.com','crypto-loot.com','jsecoin.com','coinimp.com','minero.cc','mineralt.io','cryptonoter.com'];
+    const M = ['coinhive.com','coin-hive.com','crypto-loot.com','jsecoin.com','coinimp.com','minero.cc','mineralt.io','cryptonoter.com'];
     try {
       const obs = new MutationObserver((muts) => {
         for (const m of muts) for (const n of m.addedNodes) {
-          if (n.nodeName === 'SCRIPT' && n.src && MINERS.some(d => n.src.includes(d))) n.remove();
+          if (n.nodeName === 'SCRIPT' && n.src && M.some(d => n.src.includes(d))) n.remove();
         }
       });
-      // Only watch <head> — miners inject scripts there, not in body
-      const target = document.head || document.documentElement;
-      if (target) obs.observe(target, { childList: true });
-    } catch (e) {}
+      if (document.head) obs.observe(document.head, { childList: true });
+    } catch(e){}
   }
 
   // ═══════════════════════════════════
-  // ANTI-ADBLOCK — CSS only
+  // ANTI-ADBLOCK — CSS only, skip on YouTube
   // ═══════════════════════════════════
-  if (F.antiAb) {
+  if (F.antiAb && !isYouTube) {
     try {
       const style = document.createElement('style');
       style.id = 'zenith-antiab';
@@ -196,7 +283,7 @@
         '[class*="adblock-modal"]','[class*="adblock-warning"]',
       ].map(s => `${s}{display:none!important}`).join('\n');
       (document.head || document.documentElement)?.appendChild(style);
-    } catch (e) {}
+    } catch(e){}
     setTimeout(() => { try { document.body.style.overflow=''; document.documentElement.style.overflow=''; } catch(e){} }, 3000);
   }
 
@@ -223,6 +310,6 @@
         }, true);
       }
     });
-  } catch (e) {}
+  } catch(e){}
 
 })();
