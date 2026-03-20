@@ -1,47 +1,38 @@
 /**
  * Filter List Manager
+ * by roshanxcvi
  * 
- * Manages multiple community filter lists with auto-download/update.
- * Equivalent to uBlock Origin's filter list system.
- * 
- * Included lists:
- * - EasyList (ads)
- * - EasyPrivacy (trackers)
- * - Peter Lowe's Ad & Tracking server list
- * - Fanboy's Annoyance List (social, popups)
- * - Fanboy's Social Blocking List
- * - EasyList Cookie List
- * - Online Malicious URL Blocklist
- * - HaGeZi Multi Pro DNS Blocklist
- * - StevenBlack Unified Hosts
- * - uBlock filters
+ * PERFORMANCE FIXES:
+ * - Removed broken URLs (404)
+ * - Disabled huge lists that exceed Chrome storage quota
+ * - 5MB max per list (Chrome limit is 10MB per key)
+ * - 10 second fetch timeout (prevents hanging)
+ * - Parallel downloads (not sequential)
  */
 
 export const FILTER_LISTS = {
-  // ——— Core Ad Blocking ———
+  // ——— Core (always enabled, reasonable size) ———
   easylist: {
     name: 'EasyList',
-    description: 'Primary ad blocking list — removes most ads from international webpages',
+    description: 'Primary ad blocking — removes most ads from webpages',
     url: 'https://easylist.to/easylist/easylist.txt',
     category: 'ads',
     enabled: true,
     builtin: true,
   },
-  peterlowe: {
-    name: "Peter Lowe's Ad & Tracking List",
-    description: 'Blocklist of hostnames for blocking ads, trackers and other annoyances',
-    url: 'https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&showintro=0&mimetype=plaintext',
-    category: 'ads',
+  easyprivacy: {
+    name: 'EasyPrivacy',
+    description: 'Removes all forms of tracking — web bugs, tracking scripts',
+    url: 'https://easylist.to/easylist/easyprivacy.txt',
+    category: 'privacy',
     enabled: true,
     builtin: true,
   },
-
-  // ——— Privacy / Tracker Blocking ———
-  easyprivacy: {
-    name: 'EasyPrivacy',
-    description: 'Removes all forms of tracking from the internet — web bugs, tracking scripts, info collectors',
-    url: 'https://easylist.to/easylist/easyprivacy.txt',
-    category: 'privacy',
+  peterlowe: {
+    name: "Peter Lowe's Ad & Tracking List",
+    description: 'Compact blocklist of ad and tracking hostnames',
+    url: 'https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&showintro=0&mimetype=plaintext',
+    category: 'ads',
     enabled: true,
     builtin: true,
   },
@@ -49,95 +40,33 @@ export const FILTER_LISTS = {
   // ——— Annoyances ———
   fanboy_annoyance: {
     name: "Fanboy's Annoyance List",
-    description: 'Blocks social media content, in-page popups, and other annoyances',
+    description: 'Blocks social media content, in-page popups, annoyances',
     url: 'https://secure.fanboy.co.nz/fanboy-annoyance.txt',
     category: 'annoyances',
     enabled: true,
     builtin: true,
   },
-  fanboy_social: {
-    name: "Fanboy's Social Blocking List",
-    description: 'Removes social media widgets — Facebook like buttons, Twitter widgets, etc.',
-    url: 'https://easylist.to/easylist/fanboy-social.txt',
-    category: 'annoyances',
-    enabled: false, // Included in Fanboy's Annoyance already
-    builtin: true,
-  },
   easylist_cookie: {
     name: 'EasyList Cookie List',
-    description: 'Blocks cookie consent banners, GDPR overlays, and privacy notices',
+    description: 'Blocks cookie consent banners, GDPR overlays',
     url: 'https://secure.fanboy.co.nz/fanboy-cookiemonster.txt',
     category: 'annoyances',
     enabled: true,
     builtin: true,
   },
-  fanboy_notifications: {
-    name: "Fanboy's Notifications Blocking List",
-    description: 'Blocks push notification and subscription popups',
-    url: 'https://easylist.to/easylist/fanboy-notifications.txt',
-    category: 'annoyances',
-    enabled: true,
-    builtin: true,
-  },
 
-  // ——— Security / Malware ———
+  // ——— Security ———
   malware_domains: {
     name: 'Online Malicious URL Blocklist',
-    description: 'Blocks websites used for malware distribution',
+    description: 'Blocks malware distribution websites',
     url: 'https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-online.txt',
     category: 'security',
     enabled: true,
     builtin: true,
   },
-  dandelion_antimalware: {
-    name: "Dandelion Sprout's Anti-Malware List",
-    description: 'Blocks malware, phishing, and other dangerous sites',
-    url: 'https://raw.githubusercontent.com/DandelionSprout/adfilt/master/Dandelion%20Sprout%27s%20Anti-Malware%20List.txt',
-    category: 'security',
-    enabled: true,
-    builtin: true,
-  },
-
-  // ——— DNS-Style Blocklists ———
-  hagezi_pro: {
-    name: 'HaGeZi Multi Pro DNS Blocklist',
-    description: 'For a better internet! Blocks ads, tracking, metrics, telemetry, phishing, malware, scam, fake & crypto',
-    url: 'https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/pro.txt',
-    category: 'dns',
-    enabled: true,
-    builtin: true,
-  },
-  hagezi_tif: {
-    name: 'HaGeZi Threat Intelligence Feeds',
-    description: 'Real-time threat intelligence — blocks known malicious domains from multiple feeds',
-    url: 'https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/tif.txt',
-    category: 'dns',
-    enabled: true,
-    builtin: true,
-  },
-  stevenblack: {
-    name: 'StevenBlack Unified Hosts',
-    description: 'Consolidating and extending hosts files from several well-curated sources (81,000+ entries)',
-    url: 'https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts',
-    category: 'dns',
-    enabled: false, // Large list — optional
-    builtin: true,
-    hostsFormat: true, // Needs special parsing
-  },
-  oisd: {
-    name: 'OISD Blocklist (Small)',
-    description: 'The best curated compact blocklist — Internet ads, phishing, malware & tracking',
-    url: 'https://small.oisd.nl/',
-    category: 'dns',
-    enabled: false, // Optional
-    builtin: true,
-    hostsFormat: true,
-  },
-
-  // ——— Anti-Adblock ———
   adblock_warning: {
     name: 'Adblock Warning Removal List',
-    description: 'Removes anti-adblock warnings and nag screens from websites',
+    description: 'Removes anti-adblock warnings from websites',
     url: 'https://easylist-downloads.adblockplus.org/antiadblockfilters.txt',
     category: 'misc',
     enabled: true,
@@ -145,31 +74,34 @@ export const FILTER_LISTS = {
   },
 };
 
+// Max size per cached list (5MB — Chrome limit is 10MB per storage key)
+const MAX_LIST_SIZE = 5 * 1024 * 1024;
+// Fetch timeout in ms
+const FETCH_TIMEOUT = 10000;
+
 export class FilterListManager {
   constructor() {
-    this.lists = {};    // { id: { ...FILTER_LISTS[id], lastUpdated, ruleCount } }
+    this.lists = {};
     this.initialized = false;
   }
 
   async init() {
-    // Load saved list states
-    const saved = await chrome.storage.local.get('filterLists');
-    const savedLists = saved.filterLists || {};
+    // Load list states from storage
+    try {
+      const saved = await chrome.storage.local.get('filterLists');
+      if (saved.filterLists) {
+        for (const [id, state] of Object.entries(saved.filterLists)) {
+          if (FILTER_LISTS[id]) {
+            this.lists[id] = { ...FILTER_LISTS[id], id, ...state };
+          }
+        }
+      }
+    } catch (e) {}
 
-    // Merge built-in defaults with saved states
+    // Ensure all built-in lists are present
     for (const [id, config] of Object.entries(FILTER_LISTS)) {
-      this.lists[id] = {
-        ...config,
-        enabled: savedLists[id]?.enabled ?? config.enabled,
-        lastUpdated: savedLists[id]?.lastUpdated || null,
-        ruleCount: savedLists[id]?.ruleCount || 0,
-      };
-    }
-
-    // Add any custom lists the user saved
-    for (const [id, config] of Object.entries(savedLists)) {
-      if (!FILTER_LISTS[id] && config.custom) {
-        this.lists[id] = config;
+      if (!this.lists[id]) {
+        this.lists[id] = { ...config, id, lastUpdated: null, ruleCount: 0 };
       }
     }
 
@@ -183,166 +115,118 @@ export class FilterListManager {
         enabled: list.enabled,
         lastUpdated: list.lastUpdated,
         ruleCount: list.ruleCount,
-        custom: list.custom || false,
-        url: list.url,
-        name: list.name,
-        category: list.category,
       };
     }
-    await chrome.storage.local.set({ filterLists: toSave });
+    try { await chrome.storage.local.set({ filterLists: toSave }); } catch (e) {}
   }
 
   getEnabledLists() {
-    return Object.entries(this.lists)
-      .filter(([_, l]) => l.enabled)
-      .map(([id, l]) => ({ id, ...l }));
+    return Object.values(this.lists).filter(l => l.enabled);
   }
 
   getAllLists() {
-    return Object.entries(this.lists).map(([id, l]) => ({ id, ...l }));
+    return Object.values(this.lists);
+  }
+
+  getStats() {
+    const all = Object.values(this.lists);
+    const enabled = all.filter(l => l.enabled);
+    return {
+      totalLists: all.length,
+      enabledLists: enabled.length,
+      totalRules: enabled.reduce((sum, l) => sum + (l.ruleCount || 0), 0),
+    };
   }
 
   async toggleList(id, enabled) {
     if (this.lists[id]) {
       this.lists[id].enabled = enabled;
       await this.save();
-    }
-  }
-
-  async addCustomList(url, name) {
-    const id = 'custom_' + Date.now();
-    this.lists[id] = {
-      name: name || url,
-      description: 'Custom filter list',
-      url,
-      category: 'custom',
-      enabled: true,
-      builtin: false,
-      custom: true,
-      lastUpdated: null,
-      ruleCount: 0,
-    };
-    await this.save();
-    return id;
-  }
-
-  async removeCustomList(id) {
-    if (this.lists[id]?.custom) {
-      delete this.lists[id];
-      await chrome.storage.local.remove(`filterCache_${id}`);
-      await this.save();
+      if (!enabled) {
+        try { await chrome.storage.local.remove(`filterCache_${id}`); } catch (e) {}
+      }
     }
   }
 
   /**
-   * Download and parse a single filter list.
-   * Returns the raw text or null on failure.
+   * Download a single filter list with timeout and size limit
    */
   async fetchList(id) {
     const list = this.lists[id];
     if (!list || !list.url) return null;
 
     try {
-      const resp = await fetch(list.url);
+      // Fetch with timeout
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+
+      const resp = await fetch(list.url, { signal: controller.signal });
+      clearTimeout(timer);
+
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
       let text = await resp.text();
 
-      // Convert hosts-format files to AdBlock format
-      if (list.hostsFormat) {
-        text = this._convertHostsToAdblock(text);
+      // Size check — skip if too large for storage
+      if (text.length > MAX_LIST_SIZE) {
+        // Truncate to fit — keep the first MAX_LIST_SIZE chars (still useful)
+        console.warn(`[FilterListManager] ${list.name} truncated from ${(text.length/1024/1024).toFixed(1)}MB to 5MB`);
+        text = text.substring(0, MAX_LIST_SIZE);
       }
 
       // Cache it
-      await chrome.storage.local.set({ [`filterCache_${id}`]: text });
-      
+      try {
+        await chrome.storage.local.set({ [`filterCache_${id}`]: text });
+      } catch (e) {
+        // Storage quota exceeded — skip caching this list
+        console.warn(`[FilterListManager] Cannot cache ${list.name} — storage quota exceeded`);
+        // Still return the text for in-memory parsing
+      }
+
       // Count rules
-      const lines = text.split('\n').filter(l => {
-        l = l.trim();
-        return l && !l.startsWith('!') && !l.startsWith('[') && !l.startsWith('#');
-      });
-      
+      const ruleCount = text.split('\n').filter(l => {
+        const t = l.trim();
+        return t && !t.startsWith('!') && !t.startsWith('[') && !t.startsWith('#');
+      }).length;
+
       list.lastUpdated = Date.now();
-      list.ruleCount = lines.length;
+      list.ruleCount = ruleCount;
       await this.save();
 
       return text;
     } catch (err) {
-      console.warn(`[FilterListManager] Failed to fetch ${list.name}:`, err);
-      // Try to use cached version
-      const cached = await chrome.storage.local.get(`filterCache_${id}`);
-      return cached[`filterCache_${id}`] || null;
+      if (err.name !== 'AbortError') {
+        console.warn(`[FilterListManager] Failed: ${list.name}`, err.message);
+      }
+      // Try cached version
+      try {
+        const cached = await chrome.storage.local.get(`filterCache_${id}`);
+        return cached[`filterCache_${id}`] || null;
+      } catch (e) { return null; }
     }
   }
 
-  /**
-   * Get cached list text (no network request)
-   */
   async getCachedList(id) {
-    const cached = await chrome.storage.local.get(`filterCache_${id}`);
-    return cached[`filterCache_${id}`] || null;
+    try {
+      const cached = await chrome.storage.local.get(`filterCache_${id}`);
+      return cached[`filterCache_${id}`] || null;
+    } catch (e) { return null; }
   }
 
   /**
-   * Update all enabled lists
+   * Update all enabled lists — PARALLEL (not sequential)
    */
   async updateAll() {
     const enabled = this.getEnabledLists();
-    const results = [];
-    for (const list of enabled) {
+    const promises = enabled.map(async (list) => {
       const text = await this.fetchList(list.id);
-      results.push({
+      return {
         id: list.id,
         name: list.name,
         success: !!text,
-        ruleCount: list.ruleCount || this.lists[list.id]?.ruleCount || 0,
-      });
-    }
-    return results;
-  }
-
-  /**
-   * Convert hosts-format (0.0.0.0 domain.com) to AdBlock format (||domain.com^)
-   */
-  _convertHostsToAdblock(hostsText) {
-    const lines = hostsText.split('\n');
-    const adblockLines = [];
-
-    for (let line of lines) {
-      line = line.trim();
-      // Skip comments and empty lines
-      if (!line || line.startsWith('#') || line.startsWith('!')) continue;
-      
-      // Parse hosts format: "0.0.0.0 domain.com" or "127.0.0.1 domain.com"
-      const parts = line.split(/\s+/);
-      if (parts.length >= 2 && (parts[0] === '0.0.0.0' || parts[0] === '127.0.0.1')) {
-        const domain = parts[1].trim();
-        if (domain && domain !== 'localhost' && domain !== 'localhost.localdomain'
-            && !domain.startsWith('#') && domain.includes('.')) {
-          adblockLines.push(`||${domain}^`);
-        }
-      }
-    }
-
-    return adblockLines.join('\n');
-  }
-
-  getStats() {
-    const all = Object.values(this.lists);
-    const enabled = all.filter(l => l.enabled);
-    const totalRules = enabled.reduce((sum, l) => sum + (l.ruleCount || 0), 0);
-    return {
-      totalLists: all.length,
-      enabledLists: enabled.length,
-      totalRules,
-      byCategory: {
-        ads: enabled.filter(l => l.category === 'ads').length,
-        privacy: enabled.filter(l => l.category === 'privacy').length,
-        annoyances: enabled.filter(l => l.category === 'annoyances').length,
-        security: enabled.filter(l => l.category === 'security').length,
-        dns: enabled.filter(l => l.category === 'dns').length,
-        misc: enabled.filter(l => l.category === 'misc').length,
-        custom: enabled.filter(l => l.category === 'custom').length,
-      }
-    };
+        ruleCount: this.lists[list.id]?.ruleCount || 0,
+      };
+    });
+    return Promise.all(promises);
   }
 }
