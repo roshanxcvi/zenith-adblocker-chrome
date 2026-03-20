@@ -1,8 +1,7 @@
 /**
  * Zenith AdBlocker — Content Script (Chrome Only)
  * by roshanxcvi
- *
- * YouTube-safe: all ad selectors scoped to prevent hiding header/navigation
+ 
  */
 
 (async function () {
