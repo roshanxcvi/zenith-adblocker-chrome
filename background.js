@@ -82,23 +82,28 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     sendResponse({ selectors: engine.getCosmeticSelectors(msg.hostname) });
 
   if (msg.type === 'GET_STATE') {
-    chrome.storage.local.get(['whitelist', 'enabled']).then(stored => {
-      const wl = stored.whitelist || [];
-      const en = stored.enabled !== undefined ? stored.enabled : isEnabled;
-      whitelist = wl; // update memory cache
-      isEnabled = en;
-      sendResponse({ enabled: en, blockedCount: stats[sender.tab?.id] || 0, totalBlocked: globalStats.totalBlocked, whitelist: wl });
-    });
+    (async () => {
+      try {
+        const stored = await chrome.storage.local.get(['whitelist', 'enabled']);
+        const wl = stored.whitelist || [];
+        const en = stored.enabled !== undefined ? stored.enabled : true;
+        whitelist = wl;
+        isEnabled = en;
+        sendResponse({ enabled: en, blockedCount: stats[sender.tab?.id] || 0, totalBlocked: globalStats.totalBlocked, whitelist: wl });
+      } catch (e) { sendResponse({ enabled: isEnabled, blockedCount: 0, totalBlocked: 0, whitelist }); }
+    })();
   }
 
   if (msg.type === 'GET_TAB_STATS')
     sendResponse({ enabled: isEnabled, blockedCount: stats[msg.tabId] || 0, totalBlocked: globalStats.totalBlocked, whitelist });
 
   if (msg.type === 'GET_POPUP_OVERVIEW') {
-    chrome.storage.local.get(['sinceInstall', 'whitelist']).then(stored => {
-      const si = stored.sinceInstall || { totalBlocked: 0, installDate: null };
-      const wl = stored.whitelist || [];
-      whitelist = wl;
+    (async () => {
+      try {
+        const stored = await chrome.storage.local.get(['sinceInstall', 'whitelist']);
+        const si = stored.sinceInstall || { totalBlocked: 0, installDate: null };
+        const wl = stored.whitelist || [];
+        whitelist = wl;
       const d = tabDoms[msg.tabId] || {};
       const sorted = Object.entries(d).map(([k, v]) => ({ domain: k, count: v.count, type: v.type })).sort((a, b) => b.count - a.count);
       const cats = { ads: 0, trackers: 0, social: 0, other: 0 };
@@ -109,33 +114,42 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         else cats.other++;
       }
       sendResponse({ enabled: isEnabled, blockedCount: stats[msg.tabId] || 0, totalBlocked: si.totalBlocked, sinceInstall: si, uniqueDomains: sorted.length, domains: sorted.slice(0, 15), categories: cats, whitelist: wl });
-    });
+      } catch (e) { sendResponse({ enabled: isEnabled, blockedCount: 0, totalBlocked: 0, sinceInstall: { totalBlocked: 0 }, uniqueDomains: 0, domains: [], categories: {}, whitelist: [] }); }
+    })();
   }
 
   if (msg.type === 'TOGGLE') {
-    isEnabled = !isEnabled;
-    chrome.storage.local.set({ enabled: isEnabled });
-    sendResponse({ enabled: isEnabled });
+    (async () => {
+      isEnabled = !isEnabled;
+      await chrome.storage.local.set({ enabled: isEnabled });
+      sendResponse({ enabled: isEnabled });
+    })();
   }
 
   if (msg.type === 'ADD_WHITELIST') {
-    chrome.storage.local.get('whitelist').then(stored => {
-      const wl = stored.whitelist || [];
-      const d = msg.domain.replace(/^www\./, '');
-      if (!wl.includes(d)) wl.push(d);
-      whitelist = wl; // update memory cache
-      chrome.storage.local.set({ whitelist: wl });
-      sendResponse({ whitelist: wl });
-    });
+    (async () => {
+      try {
+        const stored = await chrome.storage.local.get('whitelist');
+        const wl = stored.whitelist || [];
+        const d = msg.domain.replace(/^www\./, '');
+        if (!wl.includes(d)) wl.push(d);
+        await chrome.storage.local.set({ whitelist: wl });
+        whitelist = wl;
+        sendResponse({ whitelist: wl });
+      } catch (e) { sendResponse({ whitelist }); }
+    })();
   }
 
   if (msg.type === 'REMOVE_WHITELIST') {
-    chrome.storage.local.get('whitelist').then(stored => {
-      const wl = (stored.whitelist || []).filter(d => d !== msg.domain);
-      whitelist = wl; // update memory cache
-      chrome.storage.local.set({ whitelist: wl });
-      sendResponse({ whitelist: wl });
-    });
+    (async () => {
+      try {
+        const stored = await chrome.storage.local.get('whitelist');
+        const wl = (stored.whitelist || []).filter(d => d !== msg.domain);
+        await chrome.storage.local.set({ whitelist: wl });
+        whitelist = wl;
+        sendResponse({ whitelist: wl });
+      } catch (e) { sendResponse({ whitelist }); }
+    })();
   }
 
   if (msg.type === 'REPORT_BLOCKED') {
@@ -170,10 +184,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   if (msg.type === 'GET_DASHBOARD_DATA') {
-    chrome.storage.local.get(['sinceInstall', 'whitelist']).then(stored => {
-      const si = stored.sinceInstall || { totalBlocked: 0, installDate: null };
-      const wl = stored.whitelist || [];
-      whitelist = wl;
+    (async () => {
+      try {
+        const stored = await chrome.storage.local.get(['sinceInstall', 'whitelist']);
+        const si = stored.sinceInstall || { totalBlocked: 0, installDate: null };
+        const wl = stored.whitelist || [];
+        whitelist = wl;
       const top = Object.entries(globalStats.perSite).sort((a, b) => b[1] - a[1]).slice(0, 50);
       const cats = {};
       for (const e of blockedLog) {
@@ -188,7 +204,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         cats[c] = (cats[c] || 0) + 1;
       }
       sendResponse({ enabled: isEnabled, totalBlocked: si.totalBlocked, sinceInstall: si, topSites: top, blockedLog: blockedLog.slice(0, 200), categories: cats, whitelist: wl, networkRuleCount: engine.networkFilters.length, cosmeticRuleCount: engine.cosmeticFilters.length, exceptionCount: engine.exceptions.length, trackerLearner: trackerLearner.getStats(), learnedTrackers: trackerLearner.getLearnedTrackers().slice(0, 50), filterListStats: filterListManager.getStats() });
-    });
+      } catch (e) { sendResponse({ enabled: isEnabled, totalBlocked: 0, whitelist: [] }); }
+    })();
   }
 
   if (msg.type === 'GET_PRO_SETTINGS') chrome.storage.local.get('proSettings').then(d => sendResponse(d.proSettings || { adBlocking: true, fingerprintProtection: true, cookieAutoReject: true, annoyanceBlocking: true, minerBlocking: true, antiAdblock: true }));
