@@ -2,9 +2,8 @@
  * Zenith AdBlocker — Chrome Background (MV3)
  * by roshanxcvi
  *
- * ALL data saved to chrome.storage.local (survives browser close)
- * sinceInstall ALSO saved to chrome.storage.sync (survives clear data)
- * Debounced save — writes within 1 second of any change
+ * CRITICAL: Chrome MV3 requires ALL event listeners to be registered
+ * synchronously at the top level. They MUST run before any async code.
  */
 
 import { FilterEngine } from './rules/filter-engine.js';
@@ -26,120 +25,22 @@ let tabUrls = {};
 let sinceInstall = { totalBlocked: 0, installDate: null };
 let saveTimer = null;
 
-// ——— INIT ———
-async function init() {
-  try { const r = await fetch(chrome.runtime.getURL('rules/default-filters.txt')); engine.parse(await r.text()); } catch (e) {}
-  try {
-    await filterListManager.init();
-    for (const l of filterListManager.getEnabledLists()) { try { const c = await filterListManager.getCachedList(l.id); if (c) engine.parse(c); } catch (e) {} }
-  } catch (e) {}
+// ══════════════════════════════════════════════════
+// REGISTER ALL EVENT LISTENERS SYNCHRONOUSLY FIRST
+// Chrome MV3 requires this — no async before listeners
+// ══════════════════════════════════════════════════
 
-  // Restore from local storage
-  try {
-    const d = await chrome.storage.local.get(['enabled','whitelist','globalStats','blockedLog','sinceInstall','stats','tabDoms','tabUrls']);
-    if (d.enabled !== undefined) isEnabled = d.enabled;
-    if (d.whitelist) whitelist = d.whitelist;
-    if (d.globalStats) globalStats = d.globalStats;
-    if (d.blockedLog && Array.isArray(d.blockedLog)) blockedLog = d.blockedLog;
-    if (d.sinceInstall) sinceInstall = d.sinceInstall;
-    if (d.stats) stats = d.stats;
-    if (d.tabDoms) tabDoms = d.tabDoms;
-    if (d.tabUrls) tabUrls = d.tabUrls;
-  } catch (e) {}
-
-  // Restore sinceInstall from sync (survives clearing browser data)
-  try {
-    const s = await chrome.storage.sync.get('sinceInstall');
-    if (s.sinceInstall && s.sinceInstall.totalBlocked > sinceInstall.totalBlocked) {
-      sinceInstall = s.sinceInstall;
-      if (globalStats.totalBlocked === 0) globalStats.totalBlocked = sinceInstall.totalBlocked;
-    }
-    if (s.sinceInstall && !sinceInstall.installDate) sinceInstall.installDate = s.sinceInstall.installDate;
-  } catch (e) {}
-
-  await trackerLearner.load();
-  await syncDynamicRules();
-
-  // Restore badges
-  try { const tabs = await chrome.tabs.query({}); for (const t of tabs) { if (stats[t.id] > 0) updateBadge(t.id, stats[t.id]); } } catch (e) {}
-
-  console.log(`[Zenith] Ready — rules:${engine.networkFilters.length} total:${globalStats.totalBlocked} sinceInstall:${sinceInstall.totalBlocked}`);
-}
-
-// ——— DYNAMIC RULES ———
-async function syncDynamicRules() {
-  try {
-    const old = await chrome.declarativeNetRequest.getDynamicRules();
-    const T = ['main_frame','sub_frame','stylesheet','script','image','font','xmlhttprequest','ping','media','other'];
-    const rules = []; let id = 1000;
-    for (const f of engine.networkFilters) { if (id >= 5999 || !f.pattern || f.pattern.length < 3) continue; rules.push({ id: id++, priority: 1, action: { type: 'block' }, condition: { urlFilter: f.pattern, resourceTypes: f.resourceTypes?.length ? f.resourceTypes : T } }); }
-    for (const f of engine.exceptions) { if (id >= 5999 || !f.pattern || f.pattern.length < 3) continue; rules.push({ id: id++, priority: 2, action: { type: 'allow' }, condition: { urlFilter: f.pattern, resourceTypes: T } }); }
-    await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: old.map(r => r.id), addRules: rules.slice(0, 5000) });
-  } catch (e) {}
-}
-
-// ——— SAVE (debounced 1 second) ———
-function save() {
-  if (saveTimer) return;
-  saveTimer = setTimeout(async () => {
-    saveTimer = null;
-    try {
-      await chrome.storage.local.set({
-        globalStats, sinceInstall, stats, tabDoms, tabUrls,
-        blockedLog: blockedLog.slice(0, MAX_LOG),
-        enabled: isEnabled, whitelist, lastSave: Date.now()
-      });
-    } catch (e) {}
-    try { await chrome.storage.sync.set({ sinceInstall }); } catch (e) {}
-  }, 1000);
-}
-
-async function saveNow() {
-  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
-  try {
-    await chrome.storage.local.set({
-      globalStats, sinceInstall, stats, tabDoms, tabUrls,
-      blockedLog: blockedLog.slice(0, MAX_LOG),
-      enabled: isEnabled, whitelist, lastSave: Date.now()
-    });
-  } catch (e) {}
-  try { await chrome.storage.sync.set({ sinceInstall }); } catch (e) {}
-}
-
-// ——— DEBUG TRACKING ———
-try {
-  if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
-    chrome.declarativeNetRequest.onRuleMatchedDebug.addListener((info) => {
-      if (info.request.tabId < 0) return;
-      const tabId = info.request.tabId;
-      stats[tabId] = (stats[tabId] || 0) + 1;
-      updateBadge(tabId, stats[tabId]);
-      try {
-        const h = new URL(info.request.url).hostname;
-        globalStats.totalBlocked++; sinceInstall.totalBlocked++;
-        globalStats.perSite[h] = (globalStats.perSite[h] || 0) + 1;
-        if (!tabDoms[tabId]) tabDoms[tabId] = {};
-        if (!tabDoms[tabId][h]) tabDoms[tabId][h] = { count: 0, type: info.request.type || 'other' };
-        tabDoms[tabId][h].count++;
-        blockedLog.unshift({ url: info.request.url, domain: h, type: info.request.type || 'other', timestamp: Date.now(), tabId });
-        if (blockedLog.length > MAX_LOG) blockedLog.length = MAX_LOG;
-        // Feed tracker learner
-        try { const srcHost = info.request.documentUrl ? new URL(info.request.documentUrl).hostname : ''; if (srcHost && srcHost !== h) trackerLearner.recordSighting(h, srcHost); } catch (e) {}
-        save();
-      } catch (e) {}
-    });
-  }
-} catch (e) {}
-
-// ——— INSTALL ———
-chrome.runtime.onInstalled.addListener((d) => {
+// ——— onInstalled ———
+chrome.runtime.onInstalled.addListener((details) => {
   try { chrome.contextMenus.create({ id: 'block-element', title: 'Block this element', contexts: ['all'] }); } catch (e) {}
-  if (d.reason === 'install') { sinceInstall.installDate = new Date().toISOString(); saveNow(); }
+  if (details.reason === 'install') {
+    sinceInstall.installDate = new Date().toISOString();
+    saveNow();
+  }
   updateFilterLists();
 });
-chrome.contextMenus.onClicked.addListener((info, tab) => { if (info.menuItemId === 'block-element') chrome.tabs.sendMessage(tab.id, { type: 'PICK_ELEMENT' }); });
 
-// ——— MESSAGES ———
+// ——— onMessage ———
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.type === 'CHECK_URL')
@@ -193,7 +94,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         if (!tabDoms[tabId]) tabDoms[tabId] = {};
         if (!tabDoms[tabId][h]) tabDoms[tabId][h] = { count: 0, type: 'cosmetic' };
         tabDoms[tabId][h].count += count;
-        // Feed tracker learner
         try { const pageHost = new URL(sender.tab.url).hostname; if (pageHost !== h) trackerLearner.recordSighting(h, pageHost); } catch (e) {}
       } catch (e) {}
       save();
@@ -202,7 +102,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 
   if (msg.type === 'RESET_STATS') {
     globalStats = { totalBlocked: 0, perSite: {} }; stats = {}; blockedLog = []; tabDoms = {};
-    // sinceInstall is NEVER reset
     saveNow(); sendResponse({ success: true });
   }
 
@@ -231,19 +130,73 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return true;
 });
 
-// ——— BADGE ———
-function updateBadge(tabId, count) { try { chrome.action.setBadgeText({ text: count > 999 ? '999+' : String(count), tabId }); chrome.action.setBadgeBackgroundColor({ color: '#e74c3c', tabId }); } catch (e) {} }
+// ——— contextMenus ———
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === 'block-element') chrome.tabs.sendMessage(tab.id, { type: 'PICK_ELEMENT' });
+});
 
-// ——— NAV ———
+// ——— webNavigation ———
 chrome.webNavigation.onCommitted.addListener((d) => {
   if (d.frameId !== 0) return;
   if (!['typed','auto_bookmark','generated','keyword','keyword_generated','link'].includes(d.transitionType)) return;
   try { const h = new URL(d.url).hostname; if (tabUrls[d.tabId] === h) return; tabUrls[d.tabId] = h; } catch (e) {}
   stats[d.tabId] = 0; tabDoms[d.tabId] = {}; updateBadge(d.tabId, 0); save();
 });
+
+// ——— tabs ———
 chrome.tabs.onRemoved.addListener((id) => { delete stats[id]; delete tabDoms[id]; delete tabUrls[id]; save(); });
 
-// ——— FILTER UPDATE ———
+// ——— alarms ———
+chrome.alarms.create('autoSave', { periodInMinutes: 0.5 });
+chrome.alarms.create('updateFilters', { periodInMinutes: 1440 });
+chrome.alarms.onAlarm.addListener((a) => { if (a.name === 'autoSave') saveNow(); if (a.name === 'updateFilters') updateFilterLists(); });
+
+// ══════════════════════════════════════════════════
+// FUNCTIONS (defined after listeners — that's fine)
+// ══════════════════════════════════════════════════
+
+function updateBadge(tabId, count) {
+  try { chrome.action.setBadgeText({ text: count > 999 ? '999+' : String(count), tabId }); chrome.action.setBadgeBackgroundColor({ color: '#e74c3c', tabId }); } catch (e) {}
+}
+
+function save() {
+  if (saveTimer) return;
+  saveTimer = setTimeout(async () => {
+    saveTimer = null;
+    try {
+      await chrome.storage.local.set({
+        globalStats, sinceInstall, stats, tabDoms, tabUrls,
+        blockedLog: blockedLog.slice(0, MAX_LOG),
+        enabled: isEnabled, whitelist, lastSave: Date.now()
+      });
+    } catch (e) {}
+    try { await chrome.storage.sync.set({ sinceInstall }); } catch (e) {}
+  }, 1000);
+}
+
+async function saveNow() {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  try {
+    await chrome.storage.local.set({
+      globalStats, sinceInstall, stats, tabDoms, tabUrls,
+      blockedLog: blockedLog.slice(0, MAX_LOG),
+      enabled: isEnabled, whitelist, lastSave: Date.now()
+    });
+  } catch (e) {}
+  try { await chrome.storage.sync.set({ sinceInstall }); } catch (e) {}
+}
+
+async function syncDynamicRules() {
+  try {
+    const old = await chrome.declarativeNetRequest.getDynamicRules();
+    const T = ['main_frame','sub_frame','stylesheet','script','image','font','xmlhttprequest','ping','media','other'];
+    const rules = []; let id = 1000;
+    for (const f of engine.networkFilters) { if (id >= 5999 || !f.pattern || f.pattern.length < 3) continue; rules.push({ id: id++, priority: 1, action: { type: 'block' }, condition: { urlFilter: f.pattern, resourceTypes: f.resourceTypes?.length ? f.resourceTypes : T } }); }
+    for (const f of engine.exceptions) { if (id >= 5999 || !f.pattern || f.pattern.length < 3) continue; rules.push({ id: id++, priority: 2, action: { type: 'allow' }, condition: { urlFilter: f.pattern, resourceTypes: T } }); }
+    await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: old.map(r => r.id), addRules: rules.slice(0, 5000) });
+  } catch (e) {}
+}
+
 async function updateFilterLists() {
   try {
     engine.networkFilters = []; engine.cosmeticFilters = []; engine.exceptions = [];
@@ -254,9 +207,68 @@ async function updateFilterLists() {
   } catch (e) {}
 }
 
-// ——— ALARMS ———
-chrome.alarms.create('autoSave', { periodInMinutes: 0.5 });
-chrome.alarms.create('updateFilters', { periodInMinutes: 1440 });
-chrome.alarms.onAlarm.addListener((a) => { if (a.name === 'autoSave') saveNow(); if (a.name === 'updateFilters') updateFilterLists(); });
+// ══════════════════════════════════════════════════
+// INIT (async — runs AFTER all listeners are registered)
+// ══════════════════════════════════════════════════
+
+async function init() {
+  try { const r = await fetch(chrome.runtime.getURL('rules/default-filters.txt')); engine.parse(await r.text()); } catch (e) {}
+  try {
+    await filterListManager.init();
+    for (const l of filterListManager.getEnabledLists()) { try { const c = await filterListManager.getCachedList(l.id); if (c) engine.parse(c); } catch (e) {} }
+  } catch (e) {}
+
+  try {
+    const d = await chrome.storage.local.get(['enabled','whitelist','globalStats','blockedLog','sinceInstall','stats','tabDoms','tabUrls']);
+    if (d.enabled !== undefined) isEnabled = d.enabled;
+    if (d.whitelist) whitelist = d.whitelist;
+    if (d.globalStats) globalStats = d.globalStats;
+    if (d.blockedLog && Array.isArray(d.blockedLog)) blockedLog = d.blockedLog;
+    if (d.sinceInstall) sinceInstall = d.sinceInstall;
+    if (d.stats) stats = d.stats;
+    if (d.tabDoms) tabDoms = d.tabDoms;
+    if (d.tabUrls) tabUrls = d.tabUrls;
+  } catch (e) {}
+
+  try {
+    const s = await chrome.storage.sync.get('sinceInstall');
+    if (s.sinceInstall && s.sinceInstall.totalBlocked > sinceInstall.totalBlocked) {
+      sinceInstall = s.sinceInstall;
+      if (globalStats.totalBlocked === 0) globalStats.totalBlocked = sinceInstall.totalBlocked;
+    }
+    if (s.sinceInstall && !sinceInstall.installDate) sinceInstall.installDate = s.sinceInstall.installDate;
+  } catch (e) {}
+
+  await trackerLearner.load();
+  await syncDynamicRules();
+
+  try { const tabs = await chrome.tabs.query({}); for (const t of tabs) { if (stats[t.id] > 0) updateBadge(t.id, stats[t.id]); } } catch (e) {}
+
+  console.log(`[Zenith] Ready — rules:${engine.networkFilters.length} total:${globalStats.totalBlocked} sinceInstall:${sinceInstall.totalBlocked}`);
+}
+
+// Debug tracking (optional — only works in dev mode)
+try {
+  if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
+    chrome.declarativeNetRequest.onRuleMatchedDebug.addListener((info) => {
+      if (info.request.tabId < 0) return;
+      const tabId = info.request.tabId;
+      stats[tabId] = (stats[tabId] || 0) + 1;
+      updateBadge(tabId, stats[tabId]);
+      try {
+        const h = new URL(info.request.url).hostname;
+        globalStats.totalBlocked++; sinceInstall.totalBlocked++;
+        globalStats.perSite[h] = (globalStats.perSite[h] || 0) + 1;
+        if (!tabDoms[tabId]) tabDoms[tabId] = {};
+        if (!tabDoms[tabId][h]) tabDoms[tabId][h] = { count: 0, type: info.request.type || 'other' };
+        tabDoms[tabId][h].count++;
+        blockedLog.unshift({ url: info.request.url, domain: h, type: info.request.type || 'other', timestamp: Date.now(), tabId });
+        if (blockedLog.length > MAX_LOG) blockedLog.length = MAX_LOG;
+        try { const src = info.request.documentUrl ? new URL(info.request.documentUrl).hostname : ''; if (src && src !== h) trackerLearner.recordSighting(h, src); } catch (e) {}
+        save();
+      } catch (e) {}
+    });
+  }
+} catch (e) {}
 
 init();
