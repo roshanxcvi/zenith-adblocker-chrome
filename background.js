@@ -49,12 +49,13 @@ async function incrementBlockedCount(count) {
 }
 
 // Save session state (tab data, logs — less critical)
+// Save session state (tab data, logs — NOT whitelist, NOT enabled)
+// Whitelist is ONLY written by ADD_WHITELIST/REMOVE_WHITELIST handlers
 async function saveSession() {
   try {
     await chrome.storage.local.set({
       stats, tabDoms, tabUrls,
       blockedLog: blockedLog.slice(0, MAX_LOG),
-      enabled: isEnabled, whitelist,
       lastSave: Date.now()
     });
   } catch (e) {}
