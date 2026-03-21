@@ -6,7 +6,7 @@
 
 **Developed by [roshanxcvi](https://github.com/roshanxcvi)**
 
-![Version](https://img.shields.io/badge/version-2.0.1-00e676?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.0.0-00e676?style=for-the-badge)
 ![Chrome](https://img.shields.io/badge/Chrome-Supported-4285F4?style=for-the-badge&logo=google-chrome&logoColor=white)
 
 Block ads, trackers, fingerprinting, crypto miners, cookie popups & annoyances. Zero acceptable ads. Zero compromise.
@@ -134,7 +134,7 @@ All your data is stored in `chrome.storage.local` and stays safe across browser 
 
 Made with ❤️ by **roshanxcvi**
 
-Zenith AdBlocker v2.0.1 — Chrome
+Zenith AdBlocker v1.0.0 — Chrome
 
 ⭐ **Star this repo if Zenith helps you browse ad-free!**
 
