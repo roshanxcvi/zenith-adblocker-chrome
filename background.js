@@ -17,7 +17,7 @@ const engine = new FilterEngine();
 const trackerLearner = new TrackerLearner();
 const filterListManager = new FilterListManager();
 
-// In-memory cache (may be stale — storage is the real source of truth)
+
 let isEnabled = true;
 let stats = {};
 let whitelist = [];
@@ -28,11 +28,6 @@ let tabDoms = {};
 let tabUrls = {};
 let initDone = false;
 
-// ══════════════════════════════════════════════════
-// ATOMIC COUNTER — the core fix
-// Reads current value from storage, adds count, writes back
-// Never loses data even if service worker restarts between calls
-// ══════════════════════════════════════════════════
 async function incrementBlockedCount(count) {
   try {
     const data = await chrome.storage.local.get(['sinceInstall', 'globalStats']);
@@ -48,9 +43,6 @@ async function incrementBlockedCount(count) {
   } catch (e) {}
 }
 
-// Save session state (tab data, logs — less critical)
-// Save session state (tab data, logs — NOT whitelist, NOT enabled)
-// Whitelist is ONLY written by ADD_WHITELIST/REMOVE_WHITELIST handlers
 async function saveSession() {
   try {
     await chrome.storage.local.set({
@@ -61,9 +53,6 @@ async function saveSession() {
   } catch (e) {}
 }
 
-// ══════════════════════════════════════════════════
-// ALL EVENT LISTENERS — registered synchronously first
-// ══════════════════════════════════════════════════
 
 chrome.runtime.onInstalled.addListener((details) => {
   try { chrome.contextMenus.create({ id: 'block-element', title: 'Block this element', contexts: ['all'] }); } catch (e) {}
@@ -167,15 +156,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         tabDoms[tabId][h].count += count;
         try { if (h !== new URL(sender.tab.url).hostname) trackerLearner.recordSighting(h, new URL(sender.tab.url).hostname); } catch (e) {}
       } catch (e) {}
-      // ATOMIC increment — reads from storage, adds, writes back
+  
       incrementBlockedCount(count);
-      // Save session data (tab stats, domains)
+  
       saveSession();
     }
   }
 
   if (msg.type === 'RESET_STATS') {
-    // Reset session stats but NEVER reset sinceInstall
+    
     globalStats = { totalBlocked: 0, perSite: {} };
     stats = {};
     blockedLog = [];
@@ -238,9 +227,6 @@ chrome.alarms.onAlarm.addListener((a) => {
   if (a.name === 'updateFilters') updateFilterLists();
 });
 
-// ══════════════════════════════════════════════════
-// FUNCTIONS
-// ══════════════════════════════════════════════════
 
 function updateBadge(tabId, count) {
   try { chrome.action.setBadgeText({ text: count > 999 ? '999+' : String(count), tabId }); chrome.action.setBadgeBackgroundColor({ color: '#e74c3c', tabId }); } catch (e) {}
@@ -267,18 +253,12 @@ async function updateFilterLists() {
   } catch (e) {}
 }
 
-// ══════════════════════════════════════════════════
-// INIT — restore in-memory cache from storage
-// ══════════════════════════════════════════════════
 async function init() {
-  // Load filters
   try { const r = await fetch(chrome.runtime.getURL('rules/default-filters.txt')); engine.parse(await r.text()); } catch (e) {}
   try {
     await filterListManager.init();
     for (const l of filterListManager.getEnabledLists()) { try { const c = await filterListManager.getCachedList(l.id); if (c) engine.parse(c); } catch (e) {} }
   } catch (e) {}
-
-  // Restore in-memory cache
   try {
     const d = await chrome.storage.local.get(['enabled','whitelist','globalStats','blockedLog','stats','tabDoms','tabUrls']);
     if (d.enabled !== undefined) isEnabled = d.enabled;
@@ -290,13 +270,11 @@ async function init() {
     if (d.tabUrls) tabUrls = d.tabUrls;
   } catch (e) {}
 
-  // Restore sinceInstall from sync if local was cleared
   try {
     const local = await chrome.storage.local.get('sinceInstall');
     const sync = await chrome.storage.sync.get('sinceInstall');
     const localSI = local.sinceInstall || { totalBlocked: 0, installDate: null };
     const syncSI = sync.sinceInstall || { totalBlocked: 0, installDate: null };
-    // Use whichever is higher
     if (syncSI.totalBlocked > localSI.totalBlocked) {
       await chrome.storage.local.set({ sinceInstall: syncSI });
       globalStats.totalBlocked = Math.max(globalStats.totalBlocked, syncSI.totalBlocked);
@@ -310,19 +288,16 @@ async function init() {
   await trackerLearner.load();
   await syncDynamicRules();
 
-  // Restore badges
   try { const tabs = await chrome.tabs.query({}); for (const t of tabs) { if (stats[t.id] > 0) updateBadge(t.id, stats[t.id]); } } catch (e) {}
 
   initDone = true;
 
-  // Log what was restored
   try {
     const d = await chrome.storage.local.get('sinceInstall');
     console.log(`[Zenith] Ready — rules:${engine.networkFilters.length} sinceInstall:${(d.sinceInstall||{}).totalBlocked||0}`);
   } catch (e) {}
 }
 
-// Debug tracking (dev mode only)
 try {
   if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
     chrome.declarativeNetRequest.onRuleMatchedDebug.addListener((info) => {
@@ -340,7 +315,6 @@ try {
         if (blockedLog.length > MAX_LOG) blockedLog.length = MAX_LOG;
         try { const src = info.request.documentUrl ? new URL(info.request.documentUrl).hostname : ''; if (src && src !== h) trackerLearner.recordSighting(h, src); } catch (e) {}
       } catch (e) {}
-      // Atomic increment + session save
       incrementBlockedCount(1);
       saveSession();
     });
