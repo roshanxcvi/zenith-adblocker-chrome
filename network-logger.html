@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Zenith Network Logger</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #0a0e14;
+  color: #e4ecf8;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  min-height: 100vh;
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 24px;
+  background: #0f1419;
+  border-bottom: 1px solid #1e2a3a;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.header-left { display: flex; align-items: center; gap: 12px; }
+.header h1 { font-size: 16px; font-weight: 700; }
+.header h1 span { color: #00e676; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: #00e676; box-shadow: 0 0 8px #00e676; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.4 } }
+
+/* Toolbar */
+.toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 10px 24px;
+  background: #111820;
+  border-bottom: 1px solid #1e2a3a;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.search {
+  flex: 1;
+  min-width: 200px;
+  background: #1a2030;
+  border: 1px solid #1e2a3a;
+  color: #e4ecf8;
+  padding: 7px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+}
+.search:focus { outline: none; border-color: #00e676; }
+.filter-btn {
+  background: #1a2030;
+  border: 1px solid #1e2a3a;
+  color: #8b949e;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.filter-btn.active { background: #00e67620; border-color: #00e676; color: #00e676; }
+.filter-btn:hover { border-color: #00e676; }
+.action-btn {
+  background: transparent;
+  border: 1px solid #1e2a3a;
+  color: #8b949e;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.action-btn:hover { color: #e74c3c; border-color: #e74c3c; }
+
+/* Stats bar */
+.stats {
+  display: flex;
+  gap: 16px;
+  padding: 8px 24px;
+  background: #0f1419;
+  border-bottom: 1px solid #1e2a3a;
+  font-size: 13px;
+  color: #c9d1d9;
+}
+.stat-pill { display: flex; gap: 6px; align-items: center; }
+.stat-pill b { color: #e4ecf8; font-family: 'JetBrains Mono', Consolas, monospace; font-weight: 600; }
+
+/* Log table */
+.log {
+  padding: 0 24px 24px;
+}
+.log-row {
+  display: grid;
+  grid-template-columns: 70px 60px 1fr 110px 60px;
+  gap: 10px;
+  padding: 7px 12px;
+  border-bottom: 1px solid #151d27;
+  font-size: 13px;
+  align-items: center;
+  transition: background 0.15s;
+}
+.log-row:hover { background: #111820; }
+.col-time { font-family: 'JetBrains Mono', Consolas, monospace; color: #8b949e; font-size: 12px; }
+.col-type {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-align: center;
+}
+.type-script { background: #ff525220; color: #ff5252; }
+.type-image { background: #40c4ff20; color: #40c4ff; }
+.type-xmlhttprequest { background: #ffab4020; color: #ffab40; }
+.type-ping { background: #ffd74020; color: #ffd740; }
+.type-sub_frame { background: #b388ff20; color: #b388ff; }
+.type-main_frame { background: #00e67620; color: #00e676; }
+.type-stylesheet { background: #69f0ae20; color: #69f0ae; }
+.type-font { background: #ff80ab20; color: #ff80ab; }
+.type-media { background: #84ffff20; color: #84ffff; }
+.type-other { background: #b0bec520; color: #b0bec5; }
+.type-cosmetic { background: #ce93d820; color: #ce93d8; }
+
+.col-url {
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 13px;
+  color: #c9d1d9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.col-url .domain { color: #00e676; }
+.col-domain { font-size: 12px; color: #8b949e; text-align: right; }
+.col-action {
+  text-align: center;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 12px;
+  font-weight: 700;
+}
+.act-block { color: #e74c3c; }
+
+/* Empty state */
+.empty {
+  padding: 80px 24px;
+  text-align: center;
+  color: #8b949e;
+}
+.empty h2 { font-size: 16px; margin-bottom: 6px; color: #8b949e; }
+.empty p { font-size: 12px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z" fill="#00e676"/>
+      <path d="M10 15.5l-3.5-3.5 1.41-1.41L10 12.67l5.59-5.59L17 8.5l-7 7z" fill="#0a0e14"/>
+    </svg>
+    <h1>Zenith <span>Network Logger</span></h1>
+    <div class="live-dot"></div>
+    <span style="font-size: 13px; color: #00e676; font-weight: 600;">LIVE</span>
+  </div>
+  <span style="font-size: 13px; color: #8b949e;">Updates every 1s</span>
+</div>
+
+<div class="toolbar">
+  <input type="text" class="search" id="search" placeholder="Filter by URL or domain..." />
+  <button class="filter-btn active" data-type="all">All</button>
+  <button class="filter-btn" data-type="script">Script</button>
+  <button class="filter-btn" data-type="image">Image</button>
+  <button class="filter-btn" data-type="xmlhttprequest">XHR</button>
+  <button class="filter-btn" data-type="ping">Ping</button>
+  <button class="filter-btn" data-type="sub_frame">Frame</button>
+  <button class="filter-btn" data-type="cosmetic">Cosmetic</button>
+  <button class="action-btn" id="clear-btn">Clear Log</button>
+</div>
+
+<div class="stats">
+  <div class="stat-pill">Total: <b id="stat-total">0</b></div>
+  <div class="stat-pill">Showing: <b id="stat-showing">0</b></div>
+  <div class="stat-pill">Unique domains: <b id="stat-domains">0</b></div>
+  <div class="stat-pill">Last update: <b id="stat-update">—</b></div>
+</div>
+
+<div class="log" id="log-container">
+  <div class="empty">
+    <h2>Waiting for blocked requests...</h2>
+    <p>Browse the web in another tab and blocked requests will appear here live.</p>
+  </div>
+</div>
+
+<script src="network-logger.js"></script>
+</body>
+</html>
