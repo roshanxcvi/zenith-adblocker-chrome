@@ -12,6 +12,7 @@
 import { FilterEngine } from './rules/filter-engine.js';
 import { TrackerLearner } from './modules/tracker-learner.js';
 import { FilterListManager } from './modules/filter-list-manager.js';
+import { SCRIPTLETS, buildScriptletCode, parseScriptletRule } from './modules/scriptlets.js';
 
 const engine = new FilterEngine();
 const trackerLearner = new TrackerLearner();
@@ -203,6 +204,79 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'ALLOW_LEARNED_TRACKER') { trackerLearner.allowDomain(msg.domain); sendResponse({ success: true }); }
   if (msg.type === 'UPDATE_ALL_FILTER_LISTS') updateFilterLists().then(() => sendResponse({ success: true }));
 
+  // ——— Network Logger ———
+  if (msg.type === 'CLEAR_BLOCKED_LOG') {
+    (async () => {
+      blockedLog = [];
+      try { await chrome.storage.local.set({ blockedLog: [] }); } catch (e) {}
+      sendResponse({ success: true });
+    })();
+  }
+
+  // ——— Scriptlets — return per-hostname scriptlet codes ———
+  // ——— Scriptlets — inject via chrome.scripting (CSP-safe MAIN world) ———
+  if (msg.type === 'INJECT_SCRIPTLETS') {
+    try {
+      const host = msg.hostname || '';
+      const tabId = sender.tab?.id;
+      if (!tabId) { sendResponse({ injected: 0 }); return true; }
+      const rules = (engine.scriptletRules && engine.scriptletRules[host]) || [];
+      const globalRules = (engine.scriptletRules && engine.scriptletRules['*']) || [];
+      const allRules = [...globalRules, ...rules];
+      let injected = 0;
+      for (const r of allRules) {
+        const code = buildScriptletCode(r.name, r.args);
+        if (!code) continue;
+        try {
+          chrome.scripting.executeScript({
+            target: { tabId, allFrames: false },
+            world: 'MAIN',
+            func: function(scriptletCode) {
+              try {
+                const s = document.createElement('script');
+                s.textContent = scriptletCode;
+                (document.head || document.documentElement).appendChild(s);
+                s.remove();
+              } catch (e) {}
+            },
+            args: [code]
+          }).catch(() => {});
+          injected++;
+        } catch (e) {}
+      }
+      sendResponse({ injected });
+    } catch (e) { sendResponse({ injected: 0 }); }
+  }
+
+  if (msg.type === 'GET_SCRIPTLETS') {
+    try {
+      const host = msg.hostname || '';
+      const rules = (engine.scriptletRules && engine.scriptletRules[host]) || [];
+      const globalRules = (engine.scriptletRules && engine.scriptletRules['*']) || [];
+      const allRules = [...globalRules, ...rules];
+      const codes = [];
+      for (const r of allRules) {
+        const code = buildScriptletCode(r.name, r.args);
+        if (code) codes.push(code);
+      }
+      sendResponse({ scriptlets: codes });
+    } catch (e) { sendResponse({ scriptlets: [] }); }
+  }
+
+  // ——— Procedural Cosmetic Filters — return per-hostname procedural rules ———
+  if (msg.type === 'GET_PROCEDURAL_FILTERS') {
+    try {
+      const host = msg.hostname || '';
+      const filters = [];
+      if (engine.proceduralFilters) {
+        for (const pf of engine.proceduralFilters) {
+          if (!pf.host || pf.host === '' || host.includes(pf.host)) filters.push(pf.selector);
+        }
+      }
+      sendResponse({ filters });
+    } catch (e) { sendResponse({ filters: [] }); }
+  }
+
   return true;
 });
 
@@ -239,6 +313,24 @@ async function syncDynamicRules() {
     const rules = []; let id = 1000;
     for (const f of engine.networkFilters) { if (id >= 5999 || !f.pattern || f.pattern.length < 3) continue; rules.push({ id: id++, priority: 1, action: { type: 'block' }, condition: { urlFilter: f.pattern, resourceTypes: f.resourceTypes?.length ? f.resourceTypes : T } }); }
     for (const f of engine.exceptions) { if (id >= 5999 || !f.pattern || f.pattern.length < 3) continue; rules.push({ id: id++, priority: 2, action: { type: 'allow' }, condition: { urlFilter: f.pattern, resourceTypes: T } }); }
+
+    // REDIRECT RULES — replace common trackers with neutered versions so pages don't break
+    const redirects = [
+      { id: 9001, urlFilter: 'google-analytics.com/analytics.js', file: 'redirects/google-analytics.js' },
+      { id: 9002, urlFilter: 'google-analytics.com/ga.js', file: 'redirects/google-analytics.js' },
+      { id: 9003, urlFilter: 'googletagmanager.com/gtag/js', file: 'redirects/google-analytics.js' },
+      { id: 9004, urlFilter: 'googletagservices.com/tag/js/gpt.js', file: 'redirects/googletagservices.js' },
+      { id: 9005, urlFilter: 'connect.facebook.net/*/fbevents.js', file: 'redirects/fbevents.js' },
+    ];
+    for (const r of redirects) {
+      rules.push({
+        id: r.id,
+        priority: 100,
+        action: { type: 'redirect', redirect: { extensionPath: '/' + r.file } },
+        condition: { urlFilter: r.urlFilter, resourceTypes: ['script'] }
+      });
+    }
+
     await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: old.map(r => r.id), addRules: rules.slice(0, 5000) });
   } catch (e) {}
 }
