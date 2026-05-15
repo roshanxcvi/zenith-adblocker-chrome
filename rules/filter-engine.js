@@ -7,6 +7,8 @@ export class FilterEngine {
     this.networkFilters = [];
     this.cosmeticFilters = [];
     this.exceptions = [];
+    this.scriptletRules = {};      // { hostname: [{name, args}, ...] }
+    this.proceduralFilters = [];   // [{host, selector}, ...]
   }
 
   /**
@@ -27,6 +29,22 @@ export class FilterEngine {
         continue;
       }
 
+      // SCRIPTLET RULES — example.com##+js(set-constant, ads.loaded, true)
+      if (line.includes('##+js(')) {
+        this._parseScriptletRule(line);
+        continue;
+      }
+
+      // PROCEDURAL COSMETIC FILTERS — example.com##div:has-text(Sponsored)
+      if (line.includes('##') && /:has-text\(|:upward\(|:matches-css\(|:min-text-length\(|:remove\(/.test(line)) {
+        const [domains, selector] = line.split('##');
+        const hosts = domains ? domains.split(',') : [''];
+        for (const h of hosts) {
+          this.proceduralFilters.push({ host: h.trim(), selector: selector });
+        }
+        continue;
+      }
+
       // Cosmetic filters (element hiding)
       if (line.includes('##')) {
         const [domains, selector] = line.split('##');
@@ -39,6 +57,23 @@ export class FilterEngine {
 
       // Network filters
       this.networkFilters.push(this._buildNetworkRule(line));
+    }
+  }
+
+  /**
+   * Parse a scriptlet rule like: example.com##+js(set-constant, name, value)
+   */
+  _parseScriptletRule(line) {
+    const parts = line.split('##+js(');
+    if (parts.length !== 2) return;
+    const domains = parts[0] ? parts[0].split(',').map(d => d.trim()) : ['*'];
+    const argsRaw = parts[1].replace(/\)$/, '');
+    const argParts = argsRaw.split(',').map(s => s.trim());
+    const scriptlet = { name: argParts[0], args: argParts.slice(1) };
+    for (const host of domains) {
+      const key = host || '*';
+      if (!this.scriptletRules[key]) this.scriptletRules[key] = [];
+      this.scriptletRules[key].push(scriptlet);
     }
   }
 
