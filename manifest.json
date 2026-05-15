@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Zenith AdBlocker — Ad Blocker & Privacy Guard",
-  "version": "1.0.0",
+  "version": "1.1",
   "author": "roshanxcvi",
   "description": "The ultimate ad blocker by roshanxcvi. Blocks ads, trackers, fingerprinting, crypto miners, cookie popups & annoyances. Compatible with Chrome Zero acceptable ads.",
   "minimum_chrome_version": "110",
@@ -13,7 +13,8 @@
     "declarativeNetRequest",
     "declarativeNetRequestFeedback",
     "contextMenus",
-    "alarms"
+    "alarms",
+    "scripting"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -58,7 +59,15 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["fingerprint.js"],
+      "resources": [
+        "fingerprint.js",
+        "redirects/google-analytics.js",
+        "redirects/googletagservices.js",
+        "redirects/fbevents.js",
+        "network-logger.html",
+        "network-logger.js",
+        "modules/procedural-filters.js"
+      ],
       "matches": ["<all_urls>"]
     }
   ]
