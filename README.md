@@ -125,7 +125,7 @@ All your data is stored in `chrome.storage.local` and stays safe across browser 
 
 ---
 
-## 🎨 Improved Readability (v2.0.2)
+## 🎨 Improved Readability (v1.1)
 
 The entire UI was rebuilt with accessibility in mind:
 
