@@ -4,24 +4,24 @@
   --bg-card: #111820;
   --bg-elevated: #151d27;
   --bg-hover: #1a2332;
-  --border: #1e2a3a;
-  --border-hover: #2a3f57;
-  --text-primary: #d4dce8;
-  --text-secondary: #6b7d93;
-  --text-muted: #3d4f63;
+  --border: #2a3f57;
+  --border-hover: #3d5878;
+  --text-primary: #f0f6fc;
+  --text-secondary: #c9d1d9;
+  --text-muted: #8b949e;
   --accent: #00e676;
-  --accent-dim: #00c85320;
+  --accent-dim: #00c85330;
   --accent-mid: #00c85360;
-  --red: #ff5252;
-  --red-dim: #ff525220;
-  --orange: #ffab40;
-  --orange-dim: #ffab4020;
-  --blue: #40c4ff;
-  --blue-dim: #40c4ff20;
-  --purple: #b388ff;
-  --purple-dim: #b388ff20;
+  --red: #ff6b6b;
+  --red-dim: #ff525230;
+  --orange: #ffb74d;
+  --orange-dim: #ffab4030;
+  --blue: #4fc3f7;
+  --blue-dim: #40c4ff30;
+  --purple: #ba94ff;
+  --purple-dim: #b388ff30;
   --yellow: #ffd740;
-  --yellow-dim: #ffd74020;
+  --yellow-dim: #ffd74030;
   --cyan: #84ffff;
   --font-body: 'DM Sans', sans-serif;
   --font-mono: 'JetBrains Mono', 'Consolas', monospace;
@@ -36,7 +36,7 @@
 }
 
 html {
-  font-size: 15px;
+  font-size: 16px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -47,6 +47,7 @@ body {
   font-family: var(--font-body);
   min-height: 100vh;
   overflow-x: hidden;
+  line-height: 1.55;
 }
 
 /* ——— BACKGROUND GRID TEXTURE ——— */
@@ -110,7 +111,7 @@ body::after {
 
 .header-version {
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 0.88rem;
   color: var(--text-muted);
   background: var(--bg-card);
   padding: 3px 8px;
@@ -131,7 +132,7 @@ body::after {
 }
 
 .power-label {
-  font-size: 0.85rem;
+  font-size: 0.98rem;
   font-weight: 600;
   color: var(--accent);
   letter-spacing: 0.3px;
@@ -204,7 +205,7 @@ body::after {
   border: 1px solid var(--accent);
   border-left: 3px solid var(--accent);
   border-radius: var(--radius);
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   font-weight: 500;
   color: var(--accent);
   margin-bottom: 24px;
@@ -298,7 +299,7 @@ body::after {
 .stat-whitelist .stat-value { color: var(--purple); }
 
 .stat-label {
-  font-size: 0.75rem;
+  font-size: 1rem;
   color: var(--text-secondary);
   font-weight: 500;
   letter-spacing: 0.3px;
@@ -334,14 +335,14 @@ body::after {
 }
 
 .card-header h2 {
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 700;
   letter-spacing: -0.2px;
 }
 
 .card-badge {
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 0.88rem;
   color: var(--text-muted);
   background: var(--bg-elevated);
   padding: 3px 10px;
@@ -373,7 +374,7 @@ body::after {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.85rem;
+  font-size: 0.98rem;
   flex-shrink: 0;
   font-weight: 700;
 }
@@ -394,7 +395,7 @@ body::after {
 }
 
 .cat-name {
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   font-weight: 600;
   margin-bottom: 4px;
 }
@@ -414,7 +415,7 @@ body::after {
 
 .cat-count {
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: 0.92rem;
   font-weight: 600;
   color: var(--text-secondary);
   min-width: 48px;
@@ -434,7 +435,7 @@ body::after {
   justify-content: space-between;
   padding: 7px 0;
   border-bottom: 1px solid var(--border);
-  font-size: 0.8rem;
+  font-size: 0.94rem;
 }
 
 .domain-row:last-child {
@@ -443,7 +444,7 @@ body::after {
 
 .domain-rank {
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 0.88rem;
   color: var(--text-muted);
   width: 28px;
   text-align: center;
@@ -464,7 +465,7 @@ body::after {
   font-family: var(--font-mono);
   font-weight: 600;
   color: var(--red);
-  font-size: 0.78rem;
+  font-size: 0.92rem;
 }
 
 /* ——— WHITELIST ——— */
@@ -486,7 +487,7 @@ body::after {
   border-radius: var(--radius);
   color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   outline: none;
   transition: border-color 0.2s;
 }
@@ -506,7 +507,7 @@ body::after {
   border-radius: var(--radius);
   color: var(--accent);
   font-weight: 600;
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -532,7 +533,7 @@ body::after {
   border-radius: var(--radius);
   margin-bottom: 6px;
   font-family: var(--font-mono);
-  font-size: 0.8rem;
+  font-size: 0.94rem;
 }
 
 .whitelist-remove {
@@ -570,7 +571,7 @@ body::after {
 }
 
 .live-label {
-  font-size: 0.72rem;
+  font-size: 0.88rem;
   font-weight: 600;
   color: var(--accent);
   text-transform: uppercase;
@@ -608,7 +609,7 @@ body::after {
   align-items: center;
   padding: 7px 20px;
   border-bottom: 1px solid var(--border);
-  font-size: 0.76rem;
+  font-size: 1rem;
   transition: background 0.15s;
   animation: fadeIn 0.3s ease;
 }
@@ -624,7 +625,7 @@ body::after {
 
 .log-type {
   font-family: var(--font-mono);
-  font-size: 0.65rem;
+  font-size: 0.98rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -645,7 +646,7 @@ body::after {
 
 .log-url {
   font-family: var(--font-mono);
-  font-size: 0.73rem;
+  font-size: 0.88rem;
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -655,7 +656,7 @@ body::after {
 
 .log-time {
   font-family: var(--font-mono);
-  font-size: 0.68rem;
+  font-size: 0.98rem;
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -670,7 +671,7 @@ body::after {
 }
 
 .footer-text {
-  font-size: 0.78rem;
+  font-size: 0.92rem;
   color: var(--text-muted);
 }
 
@@ -681,7 +682,7 @@ body::after {
   border-radius: var(--radius);
   color: var(--red);
   font-weight: 600;
-  font-size: 0.8rem;
+  font-size: 0.94rem;
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -696,7 +697,7 @@ body::after {
   text-align: center;
   padding: 24px 16px;
   color: var(--text-muted);
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   font-style: italic;
 }
 
@@ -778,7 +779,7 @@ body::after {
   letter-spacing: 0.8px;
 }
 .sib-date {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--text-tertiary, #484f58);
   margin-top: 2px;
 }
@@ -789,3 +790,25 @@ body::after {
   color: #00e676;
   letter-spacing: -1px;
 }
+
+/* Network Logger button */
+.net-log-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 230, 118, 0.08);
+  border: 1px solid rgba(0, 230, 118, 0.25);
+  color: #00e676;
+  padding: 7px 14px;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  margin-right: 14px;
+  transition: all 0.2s;
+}
+.net-log-btn:hover {
+  background: rgba(0, 230, 118, 0.15);
+  border-color: #00e676;
+}
+.header-right { display: flex; align-items: center; gap: 0; }
