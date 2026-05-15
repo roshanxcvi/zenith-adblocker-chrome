@@ -56,6 +56,34 @@
       if (r && r.selectors) selectors = r.selectors;
     } catch (e) {}
 
+    // ═══════════════════════════════════
+    // PROCEDURAL COSMETIC FILTERS
+    // (:has-text, :upward, :matches-css, etc.)
+    // ═══════════════════════════════════
+    try {
+      const procResp = await send({ type: 'GET_PROCEDURAL_FILTERS', hostname });
+      if (procResp && procResp.filters && procResp.filters.length > 0) {
+        const startProcedural = async () => {
+          try {
+            const mod = await import(chrome.runtime.getURL('modules/procedural-filters.js'));
+            const proc = new mod.ProceduralFilters();
+            for (const f of procResp.filters) proc.add(f);
+            proc.observe(1500);
+          } catch (e) {}
+        };
+        if (document.readyState === 'complete') startProcedural();
+        else window.addEventListener('load', startProcedural);
+      }
+    } catch (e) {}
+
+    // ═══════════════════════════════════
+    // SCRIPTLETS — request background to inject via chrome.scripting
+    // (CSP-safe — background uses chrome.scripting.executeScript)
+    // ═══════════════════════════════════
+    try {
+      send({ type: 'INJECT_SCRIPTLETS', hostname });
+    } catch (e) {}
+
     // Generic selectors — SAFE on all sites including YouTube
     // These are precise enough to never match navigation/header elements
     const GENERIC = [
