@@ -6,7 +6,7 @@
 
 **Developed by [roshanxcvi](https://github.com/roshanxcvi)**
 
-![Version](https://img.shields.io/badge/version-1.0.0-00e676?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.0.2-00e676?style=for-the-badge)
 ![Chrome](https://img.shields.io/badge/Chrome-Supported-4285F4?style=for-the-badge&logo=google-chrome&logoColor=white)
 
 Block ads, trackers, fingerprinting, crypto miners, cookie popups & annoyances. Zero acceptable ads. Zero compromise.
@@ -47,6 +47,10 @@ Then load in Chrome: `chrome://extensions/` → Developer mode → Load unpacked
 | Annoyance Blocking | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Crypto Miner Blocking | ✅ | ✅ | ❌ | ❌ | ❌ |
 | YouTube Ad Killer | ✅ | ✅ | ❌ | ❌ | ❌ |
+| **Scriptlet Injection** | ✅ | ✅ | ❌ | ❌ | ❌ |
+| **Procedural Cosmetic Filters** | ✅ | ✅ | ❌ | ❌ | ❌ |
+| **Redirect Rules** | ✅ | ✅ | ❌ | ❌ | ❌ |
+| **Live Network Logger** | ✅ | ⚠️ | ❌ | ❌ | ❌ |
 | Dashboard Analytics | ✅ | ❌ | ❌ | ⚠️ | ❌ |
 | Since Install Counter | ✅ | ✅ | ❌ | ❌ | ❌ |
 | Zero "Acceptable Ads" | ✅ | ✅ | ❌ | ✅ | — |
@@ -70,6 +74,20 @@ All enabled by default. No configuration needed.
 **🧹 Annoyance Blocking** — Kills newsletter popups, chat widgets (Intercom, Drift, Tidio, Tawk, Crisp, HubSpot), push notification prompts, app banners, sticky videos.
 
 **⛏️ Crypto Miner Blocking** — Blocks CoinHive, CryptoLoot, JSECoin, CoinImp and 15+ mining services.
+
+---
+
+## 🔥 Advanced Features (v1.1)
+
+These put Zenith on par with uBlock Origin's technical capabilities:
+
+**📡 Live Network Logger** — A real-time dashboard showing every blocked request as it happens. Filter by type (Script, Image, XHR, Ping, Frame, Cosmetic), search by URL or domain, see exactly what Zenith is blocking. Open from the dashboard header.
+
+**💉 Scriptlet Injection** — Pre-built JavaScript injections that neutralize ad scripts and anti-adblock detection. 10 built-in scriptlets including `set-constant`, `abort-on-property-read`, `google-analytics` fake, `googletagservices` fake, and `facebook-pixel` fake. Add per-site rules with filter syntax: `example.com##+js(set-constant, ads.loaded, true)`.
+
+**🎯 Procedural Cosmetic Filters** — Advanced selectors that pure CSS can't do. Hide elements by their text content, computed style, or by climbing the DOM tree. Supports `:has-text("Sponsored")`, `:upward(N)`, `:upward(selector)`, `:matches-css(prop:value)`, `:min-text-length(N)`, and `:remove()`. Example: `twitter.com##article:has-text(Promoted)` hides any promoted tweet.
+
+**↪️ Redirect Rules** — Instead of just blocking trackers, Zenith redirects them to neutered local copies. Google Analytics, Google Publisher Tag, and Facebook Pixel all get fake working versions, so sites that depend on them don't break. No tracking, no breakage.
 
 ---
 
@@ -107,6 +125,18 @@ All your data is stored in `chrome.storage.local` and stays safe across browser 
 
 ---
 
+## 🎨 Improved Readability (v2.0.2)
+
+The entire UI was rebuilt with accessibility in mind:
+
+- **Larger fonts** throughout — minimum 12px (previously 8px in some places)
+- **Higher contrast colors** — text is brighter, borders are visible
+- **More spacing** between elements for comfortable scanning
+- **Wider popup** (380px) so domain names don't get truncated
+- **Better disabled-state styling** so it's clear what's on/off
+
+---
+
 ## ⚙️ How It Works
 
 - **Network blocking:** Chrome's `declarativeNetRequest` API blocks ads at the network level before they load
@@ -115,6 +145,7 @@ All your data is stored in `chrome.storage.local` and stays safe across browser 
 - **Dynamic rules:** Filter engine parses AdBlock-style lists and syncs up to 5,000 dynamic rules
 - **Atomic saves:** All data written directly to `chrome.storage.local` — no debouncing, no data loss
 - **Filter updates:** 7 community lists auto-update every 24 hours with 10s timeout and 5MB size limit
+- **CSP-safe scriptlets:** Uses `chrome.scripting.executeScript` in MAIN world to inject without violating page CSP
 
 ---
 
@@ -130,11 +161,21 @@ All your data is stored in `chrome.storage.local` and stays safe across browser 
 
 ---
 
+## 📋 Changelog
+
+**v1.1** — Advanced features pack: Network Logger, Scriptlet Injection, Procedural Cosmetic Filters, Redirect Rules. Massive readability improvements (larger fonts, higher contrast). Wider popup (380px).
+
+**v1.1** — Atomic storage operations for whitelist and since-install counter. Whitelist now survives browser restarts. YouTube-specific ad killer with auto-skip. Removed broken filter list URLs.
+
+**v1.1** — sinceInstall counter with `chrome.storage.sync` cloud backup. Bulletproof data persistence. Six protection modules.
+
+---
+
 <div align="center">
 
 Made with ❤️ by **roshanxcvi**
 
-Zenith AdBlocker v1.0.0 — Chrome
+Zenith AdBlocker v1.1 — Chrome
 
 ⭐ **Star this repo if Zenith helps you browse ad-free!**
 
