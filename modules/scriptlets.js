@@ -4,7 +4,16 @@
  *
  * Each scriptlet is a string of JS code that runs in the page context.
  * Activated via filter rules: example.com##+js(scriptlet-name, arg1, arg2)
+ *
+ * v2.0.3 SECURITY:
+ *   - buildScriptletCode() is gated by SCRIPTLET_ALLOWLIST (security.js)
+ *   - args are sanitized via sanitizeScriptletArgs() before string interpolation
+ *   - Filter list sanitizer strips scriptlet rules using non-allowlisted names
+ *     BEFORE they reach the parser, so there's nothing for a remote list
+ *     to inject even if the SCRIPTLETS map were extended unsafely.
  */
+
+import { isScriptletAllowed, sanitizeScriptletArgs, logError } from './security.js';
 
 export const SCRIPTLETS = {
   // Replace functions with no-ops
@@ -127,13 +136,23 @@ export const SCRIPTLETS = {
 };
 
 /**
- * Build a complete scriptlet payload from a filter rule
+ * Build a complete scriptlet payload from a filter rule.
+ * SECURITY: gated by SCRIPTLET_ALLOWLIST + arg length/char sanitization.
+ *
+ * Returns null if the scriptlet name is not allowlisted.
  * Example rule: ##+js(set-constant, ads.loaded, true)
  */
 export function buildScriptletCode(scriptletName, args) {
+  // Defense in depth — allowlist check even though sanitizeFilterList
+  // already strips non-allowlisted scriptlet rules upstream.
+  if (!isScriptletAllowed(scriptletName)) {
+    logError('scriptlet:rejected', `Refused non-allowlisted scriptlet: ${scriptletName}`);
+    return null;
+  }
   const fn = SCRIPTLETS[scriptletName];
   if (!fn) return null;
-  const argStr = args.map(a => `"${String(a).replace(/"/g, '\\"')}"`).join(', ');
+  const safeArgs = sanitizeScriptletArgs(args);
+  const argStr = safeArgs.map(a => `"${a.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`).join(', ');
   return `(${fn})(${argStr});`;
 }
 
