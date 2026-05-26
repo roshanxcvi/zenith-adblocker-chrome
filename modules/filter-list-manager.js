@@ -1,14 +1,29 @@
 /**
  * Filter List Manager
  * by roshanxcvi
- * 
- * PERFORMANCE FIXES:
+ *
+ * v1.1SECURITY HARDENING:
+ * - URL origin allowlist (no fetching from arbitrary URLs)
+ * - HTTPS-only enforcement
+ * - Content sanitization before parsing (strips dangerous scriptlet rules
+ *   referencing non-allowlisted scriptlet names)
+ * - SHA-256 hashing for tamper detection across re-fetches
+ *
+ * PERFORMANCE:
  * - Removed broken URLs (404)
  * - Disabled huge lists that exceed Chrome storage quota
  * - 5MB max per list (Chrome limit is 10MB per key)
  * - 10 second fetch timeout (prevents hanging)
  * - Parallel downloads (not sequential)
  */
+
+import {
+  sanitizeFilterList,
+  isTrustedFilterUrl,
+  hashFilterList,
+  logError,
+  MAX_LIST_BYTES,
+} from './security.js';
 
 export const FILTER_LISTS = {
   // ——— Core (always enabled, reasonable size) ———
@@ -74,8 +89,7 @@ export const FILTER_LISTS = {
   },
 };
 
-// Max size per cached list (5MB — Chrome limit is 10MB per storage key)
-const MAX_LIST_SIZE = 5 * 1024 * 1024;
+// Max size per cached list — imported from security.js as MAX_LIST_BYTES
 // Fetch timeout in ms
 const FETCH_TIMEOUT = 10000;
 
@@ -115,9 +129,11 @@ export class FilterListManager {
         enabled: list.enabled,
         lastUpdated: list.lastUpdated,
         ruleCount: list.ruleCount,
+        contentHash: list.contentHash || null,
+        droppedLines: list.droppedLines || 0,
       };
     }
-    try { await chrome.storage.local.set({ filterLists: toSave }); } catch (e) {}
+    try { await chrome.storage.local.set({ filterLists: toSave }); } catch (e) { logError('filter-list:save', e); }
   }
 
   getEnabledLists() {
@@ -149,60 +165,98 @@ export class FilterListManager {
   }
 
   /**
-   * Download a single filter list with timeout and size limit
+   * Download a single filter list with timeout, size limit, origin allowlist,
+   * and content sanitization. SECURITY-CRITICAL function.
    */
   async fetchList(id) {
     const list = this.lists[id];
     if (!list || !list.url) return null;
+
+    // FIX #1 — origin allowlist + HTTPS only
+    if (!isTrustedFilterUrl(list.url)) {
+      logError('filter-list:url-rejected', `Untrusted filter URL refused: ${list.url}`);
+      return null;
+    }
 
     try {
       // Fetch with timeout
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
-      const resp = await fetch(list.url, { signal: controller.signal });
+      const resp = await fetch(list.url, {
+        signal: controller.signal,
+        // Don't send cookies/credentials to filter list servers
+        credentials: 'omit',
+        // Prevent the response being treated as anything other than text
+        headers: { 'Accept': 'text/plain' },
+      });
       clearTimeout(timer);
 
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
 
       let text = await resp.text();
 
-      // Size check — skip if too large for storage
-      if (text.length > MAX_LIST_SIZE) {
-        // Truncate to fit — keep the first MAX_LIST_SIZE chars (still useful)
+      // Size cap
+      if (text.length > MAX_LIST_BYTES) {
         console.warn(`[FilterListManager] ${list.name} truncated from ${(text.length/1024/1024).toFixed(1)}MB to 5MB`);
-        text = text.substring(0, MAX_LIST_SIZE);
+        text = text.substring(0, MAX_LIST_BYTES);
       }
 
-      // Cache it
+      // FIX #1 — SANITIZE before storing. Strips scriptlet rules referencing
+      // names outside SCRIPTLET_ALLOWLIST + suspicious lines.
+      const { text: cleanText, dropped } = sanitizeFilterList(text);
+      if (dropped > 0) {
+        console.warn(`[FilterListManager] ${list.name}: dropped ${dropped} suspicious lines during sanitization`);
+      }
+
+      // FIX #1 — compute hash for tamper detection
+      const newHash = await hashFilterList(cleanText);
+      const prevHash = list.contentHash;
+      if (prevHash && newHash && prevHash !== newHash) {
+        // Big drop in rule count after a hash change = suspicious
+        const prevCount = list.ruleCount || 0;
+        const newCount = cleanText.split('\n').filter(l => {
+          const t = l.trim();
+          return t && !t.startsWith('!') && !t.startsWith('[') && !t.startsWith('#');
+        }).length;
+        if (prevCount > 100 && newCount < prevCount * 0.1) {
+          logError('filter-list:suspicious-shrink',
+            `${list.name} shrank from ${prevCount} to ${newCount} rules — possible mirror compromise`);
+        }
+      }
+
+      // Cache the sanitized version (not the raw)
       try {
-        await chrome.storage.local.set({ [`filterCache_${id}`]: text });
+        await chrome.storage.local.set({ [`filterCache_${id}`]: cleanText });
       } catch (e) {
-        // Storage quota exceeded — skip caching this list
         console.warn(`[FilterListManager] Cannot cache ${list.name} — storage quota exceeded`);
-        // Still return the text for in-memory parsing
       }
 
       // Count rules
-      const ruleCount = text.split('\n').filter(l => {
+      const ruleCount = cleanText.split('\n').filter(l => {
         const t = l.trim();
         return t && !t.startsWith('!') && !t.startsWith('[') && !t.startsWith('#');
       }).length;
 
       list.lastUpdated = Date.now();
       list.ruleCount = ruleCount;
+      list.contentHash = newHash;
+      list.droppedLines = dropped;
       await this.save();
 
-      return text;
+      return cleanText;
     } catch (err) {
       if (err.name !== 'AbortError') {
-        console.warn(`[FilterListManager] Failed: ${list.name}`, err.message);
+        logError('filter-list:fetch', `${list.name}: ${err.message}`);
       }
-      // Try cached version
+      // Try cached version (already sanitized when it was stored)
       try {
         const cached = await chrome.storage.local.get(`filterCache_${id}`);
         return cached[`filterCache_${id}`] || null;
-      } catch (e) { return null; }
+      } catch (e) {
+        logError('filter-list:cache-read', e);
+        return null;
+      }
     }
   }
 
