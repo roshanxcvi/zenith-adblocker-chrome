@@ -2,22 +2,40 @@
  * Zenith AdBlocker — Chrome Background (MV3)
  * by roshanxcvi
  *
- * KEY DESIGN (uBlock Origin approach):
- * - sinceInstall counter uses ATOMIC storage operations
- * - Read from storage → increment → write back (never trust in-memory)
- * - All event listeners registered synchronously at top level
- * - In-memory state is just a cache; storage is the truth
+ * v1.1 SECURITY HARDENING — all six audit issues addressed:
+ *   #1 Filter list integrity .... sanitizeFilterList() before every engine.parse()
+ *   #2 Scriptlet sandboxing ..... SCRIPTLET_ALLOWLIST gates buildScriptletCode
+ *   #3 Sender validation ........ validateSender() runs first on every message
+ *   #4 Explicit CSP ............. declared in manifest.json
+ *   #5 Null-safe URL parsing .... safeHostname() everywhere new URL() was used
+ *   #6 Fingerprint scoping ...... handled in fingerprint.js (call-stack check)
+ *
+ * Code quality:
+ *   - onMessage dispatched via HANDLERS map (was 200+ lines of if/else)
+ *   - saveSession throttled to ≤1 write / 2s via the alarm
+ *   - Errors logged via logError() (counted, not silently swallowed)
  */
 
 import { FilterEngine } from './rules/filter-engine.js';
 import { TrackerLearner } from './modules/tracker-learner.js';
 import { FilterListManager } from './modules/filter-list-manager.js';
 import { SCRIPTLETS, buildScriptletCode, parseScriptletRule } from './modules/scriptlets.js';
+import {
+  validateSender,
+  safeHostname,
+  safeSenderHostname,
+  sanitizeFilterList,
+  isScriptletAllowed,
+  logError,
+} from './modules/security.js';
 
 const engine = new FilterEngine();
 const trackerLearner = new TrackerLearner();
 const filterListManager = new FilterListManager();
 
+// ════════════════════════════════════════════════════════════════
+// State (in-memory cache; storage is the source of truth)
+// ════════════════════════════════════════════════════════════════
 
 let isEnabled = true;
 let stats = {};
@@ -29,6 +47,25 @@ let tabDoms = {};
 let tabUrls = {};
 let initDone = false;
 
+// ════════════════════════════════════════════════════════════════
+// Throttled persistence (fixes "saveSession on every block")
+// ════════════════════════════════════════════════════════════════
+
+let dirty = false;
+function markDirty() { dirty = true; }
+
+async function flushIfDirty() {
+  if (!dirty) return;
+  dirty = false;
+  try {
+    await chrome.storage.local.set({
+      stats, tabDoms, tabUrls,
+      blockedLog: blockedLog.slice(0, MAX_LOG),
+      lastSave: Date.now(),
+    });
+  } catch (e) { logError('flushIfDirty', e); dirty = true; /* retry next tick */ }
+}
+
 async function incrementBlockedCount(count) {
   try {
     const data = await chrome.storage.local.get(['sinceInstall', 'globalStats']);
@@ -36,274 +73,395 @@ async function incrementBlockedCount(count) {
     const gs = data.globalStats || { totalBlocked: 0, perSite: {} };
     si.totalBlocked += count;
     gs.totalBlocked += count;
-    // Update in-memory cache too
     globalStats.totalBlocked = gs.totalBlocked;
     await chrome.storage.local.set({ sinceInstall: si, globalStats: gs });
-    // Backup sinceInstall to sync (survives clear browser data)
-    chrome.storage.sync.set({ sinceInstall: si }).catch(() => {});
-  } catch (e) {}
+    chrome.storage.sync.set({ sinceInstall: si }).catch(e => logError('sync-write', e));
+  } catch (e) { logError('incrementBlockedCount', e); }
 }
 
-async function saveSession() {
-  try {
-    await chrome.storage.local.set({
-      stats, tabDoms, tabUrls,
-      blockedLog: blockedLog.slice(0, MAX_LOG),
-      lastSave: Date.now()
-    });
-  } catch (e) {}
-}
-
+// ════════════════════════════════════════════════════════════════
+// Top-level listeners (MUST be registered synchronously for MV3)
+// ════════════════════════════════════════════════════════════════
 
 chrome.runtime.onInstalled.addListener((details) => {
-  try { chrome.contextMenus.create({ id: 'block-element', title: 'Block this element', contexts: ['all'] }); } catch (e) {}
+  try { chrome.contextMenus.create({ id: 'block-element', title: 'Block this element', contexts: ['all'] }); }
+  catch (e) { logError('contextMenu.create', e); }
   if (details.reason === 'install') {
-    chrome.storage.local.set({ sinceInstall: { totalBlocked: 0, installDate: new Date().toISOString() } });
-    chrome.storage.sync.set({ sinceInstall: { totalBlocked: 0, installDate: new Date().toISOString() } });
+    const seed = { totalBlocked: 0, installDate: new Date().toISOString() };
+    chrome.storage.local.set({ sinceInstall: seed }).catch(e => logError('install-seed-local', e));
+    chrome.storage.sync.set({ sinceInstall: seed }).catch(e => logError('install-seed-sync', e));
   }
   updateFilterLists();
 });
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  const type = msg?.type;
 
-  if (msg.type === 'CHECK_URL')
-    sendResponse({ blocked: isEnabled && engine.shouldBlock(msg.url, msg.sourceUrl) });
-
-  if (msg.type === 'GET_COSMETIC_FILTERS')
-    sendResponse({ selectors: engine.getCosmeticSelectors(msg.hostname) });
-
-  if (msg.type === 'GET_STATE') {
-    (async () => {
-      try {
-        const stored = await chrome.storage.local.get(['whitelist', 'enabled']);
-        const wl = stored.whitelist || [];
-        const en = stored.enabled !== undefined ? stored.enabled : true;
-        whitelist = wl;
-        isEnabled = en;
-        sendResponse({ enabled: en, blockedCount: stats[sender.tab?.id] || 0, totalBlocked: globalStats.totalBlocked, whitelist: wl });
-      } catch (e) { sendResponse({ enabled: isEnabled, blockedCount: 0, totalBlocked: 0, whitelist }); }
-    })();
+  // FIX #3 — validate sender BEFORE dispatching
+  const v = validateSender(sender, type);
+  if (!v.ok) {
+    logError('msg:sender-rejected', `${type} from ${sender?.url || 'unknown'}: ${v.reason}`);
+    sendResponse({ error: 'forbidden' });
+    return false;
   }
 
-  if (msg.type === 'GET_TAB_STATS')
-    sendResponse({ enabled: isEnabled, blockedCount: stats[msg.tabId] || 0, totalBlocked: globalStats.totalBlocked, whitelist });
-
-  if (msg.type === 'GET_POPUP_OVERVIEW') {
-    (async () => {
-      try {
-        const stored = await chrome.storage.local.get(['sinceInstall', 'whitelist']);
-        const si = stored.sinceInstall || { totalBlocked: 0, installDate: null };
-        const wl = stored.whitelist || [];
-        whitelist = wl;
-      const d = tabDoms[msg.tabId] || {};
-      const sorted = Object.entries(d).map(([k, v]) => ({ domain: k, count: v.count, type: v.type })).sort((a, b) => b.count - a.count);
-      const cats = { ads: 0, trackers: 0, social: 0, other: 0 };
-      for (const { domain: dm } of sorted) {
-        if (/google|doubleclick|googlesyndication|taboola|outbrain|adnxs|criteo|pubmatic|amazon-adsystem|ads\.|adform/.test(dm)) cats.ads++;
-        else if (/analytics|hotjar|mixpanel|clarity|segment|optimizely|chartbeat|scorecard|quantserve|demdex|moatads/.test(dm)) cats.trackers++;
-        else if (/facebook|twitter|linkedin|instagram|snap\.licdn|pixel\.facebook/.test(dm)) cats.social++;
-        else cats.other++;
-      }
-      sendResponse({ enabled: isEnabled, blockedCount: stats[msg.tabId] || 0, totalBlocked: si.totalBlocked, sinceInstall: si, uniqueDomains: sorted.length, domains: sorted.slice(0, 15), categories: cats, whitelist: wl });
-      } catch (e) { sendResponse({ enabled: isEnabled, blockedCount: 0, totalBlocked: 0, sinceInstall: { totalBlocked: 0 }, uniqueDomains: 0, domains: [], categories: {}, whitelist: [] }); }
-    })();
+  const handler = HANDLERS[type];
+  if (!handler) {
+    sendResponse({ error: 'unknown_message_type' });
+    return false;
   }
-
-  if (msg.type === 'TOGGLE') {
-    (async () => {
-      isEnabled = !isEnabled;
-      await chrome.storage.local.set({ enabled: isEnabled });
-      sendResponse({ enabled: isEnabled });
-    })();
-  }
-
-  if (msg.type === 'ADD_WHITELIST') {
-    (async () => {
-      try {
-        const stored = await chrome.storage.local.get('whitelist');
-        const wl = stored.whitelist || [];
-        const d = msg.domain.replace(/^www\./, '');
-        if (!wl.includes(d)) wl.push(d);
-        await chrome.storage.local.set({ whitelist: wl });
-        whitelist = wl;
-        sendResponse({ whitelist: wl });
-      } catch (e) { sendResponse({ whitelist }); }
-    })();
-  }
-
-  if (msg.type === 'REMOVE_WHITELIST') {
-    (async () => {
-      try {
-        const stored = await chrome.storage.local.get('whitelist');
-        const wl = (stored.whitelist || []).filter(d => d !== msg.domain);
-        await chrome.storage.local.set({ whitelist: wl });
-        whitelist = wl;
-        sendResponse({ whitelist: wl });
-      } catch (e) { sendResponse({ whitelist }); }
-    })();
-  }
-
-  if (msg.type === 'REPORT_BLOCKED') {
-    const tabId = sender.tab?.id;
-    const count = msg.count || 1;
-    if (tabId) {
-      stats[tabId] = (stats[tabId] || 0) + count;
-      updateBadge(tabId, stats[tabId]);
-      try {
-        const h = new URL(sender.tab.url).hostname;
-        globalStats.perSite[h] = (globalStats.perSite[h] || 0) + count;
-        if (!tabDoms[tabId]) tabDoms[tabId] = {};
-        if (!tabDoms[tabId][h]) tabDoms[tabId][h] = { count: 0, type: 'cosmetic' };
-        tabDoms[tabId][h].count += count;
-        try { if (h !== new URL(sender.tab.url).hostname) trackerLearner.recordSighting(h, new URL(sender.tab.url).hostname); } catch (e) {}
-      } catch (e) {}
-  
-      incrementBlockedCount(count);
-  
-      saveSession();
+  try {
+    const result = handler(msg, sender, sendResponse);
+    // If handler returned a Promise, await it for async response.
+    if (result && typeof result.then === 'function') {
+      result.catch(e => {
+        logError(`handler:${type}`, e);
+        try { sendResponse({ error: 'handler_threw' }); } catch (_) {}
+      });
+      return true; // keep the channel open
     }
+    // Otherwise the handler called sendResponse synchronously (or didn't respond)
+    return result === true;
+  } catch (e) {
+    logError(`handler:${type}:sync`, e);
+    try { sendResponse({ error: 'handler_threw' }); } catch (_) {}
+    return false;
   }
-
-  if (msg.type === 'RESET_STATS') {
-    
-    globalStats = { totalBlocked: 0, perSite: {} };
-    stats = {};
-    blockedLog = [];
-    tabDoms = {};
-    chrome.storage.local.set({ globalStats, stats: {}, blockedLog: [], tabDoms: {} });
-    sendResponse({ success: true });
-  }
-
-  if (msg.type === 'GET_DASHBOARD_DATA') {
-    (async () => {
-      try {
-        const stored = await chrome.storage.local.get(['sinceInstall', 'whitelist']);
-        const si = stored.sinceInstall || { totalBlocked: 0, installDate: null };
-        const wl = stored.whitelist || [];
-        whitelist = wl;
-      const top = Object.entries(globalStats.perSite).sort((a, b) => b[1] - a[1]).slice(0, 50);
-      const cats = {};
-      for (const e of blockedLog) {
-        const d = e.domain; let c = 'Other';
-        if (/google|doubleclick|googlesyndication|googleadservices|googletagmanager|google-analytics|imasdk/.test(d)) c = 'Google Ads & Tracking';
-        else if (/facebook|fbevents|pixel\.facebook/.test(d)) c = 'Facebook / Meta';
-        else if (/taboola|outbrain|mgid|revcontent/.test(d)) c = 'Native Ads';
-        else if (/criteo|pubmatic|adnxs|rubiconproject|openx|indexexchange/.test(d)) c = 'Programmatic / RTB';
-        else if (/amazon-adsystem|ads\.twitter|ads\.linkedin|bat\.bing/.test(d)) c = 'Platform Ads';
-        else if (/hotjar|mixpanel|clarity|chartbeat|scorecardresearch|demdex|moatads/.test(d)) c = 'Trackers & Analytics';
-        else if (/adroll|viglink|liveintent|adform|adsrvr/.test(d)) c = 'Ad Networks';
-        cats[c] = (cats[c] || 0) + 1;
-      }
-      sendResponse({ enabled: isEnabled, totalBlocked: si.totalBlocked, sinceInstall: si, topSites: top, blockedLog: blockedLog.slice(0, 200), categories: cats, whitelist: wl, networkRuleCount: engine.networkFilters.length, cosmeticRuleCount: engine.cosmeticFilters.length, exceptionCount: engine.exceptions.length, trackerLearner: trackerLearner.getStats(), learnedTrackers: trackerLearner.getLearnedTrackers().slice(0, 50), filterListStats: filterListManager.getStats() });
-      } catch (e) { sendResponse({ enabled: isEnabled, totalBlocked: 0, whitelist: [] }); }
-    })();
-  }
-
-  if (msg.type === 'GET_PRO_SETTINGS') chrome.storage.local.get('proSettings').then(d => sendResponse(d.proSettings || { adBlocking: true, fingerprintProtection: true, cookieAutoReject: true, annoyanceBlocking: true, minerBlocking: true, antiAdblock: true }));
-  if (msg.type === 'SET_PRO_SETTINGS') { chrome.storage.local.set({ proSettings: msg.settings }); sendResponse({ success: true }); }
-  if (msg.type === 'ALLOW_LEARNED_TRACKER') { trackerLearner.allowDomain(msg.domain); sendResponse({ success: true }); }
-  if (msg.type === 'UPDATE_ALL_FILTER_LISTS') updateFilterLists().then(() => sendResponse({ success: true }));
-
-  // ——— Network Logger ———
-  if (msg.type === 'CLEAR_BLOCKED_LOG') {
-    (async () => {
-      blockedLog = [];
-      try { await chrome.storage.local.set({ blockedLog: [] }); } catch (e) {}
-      sendResponse({ success: true });
-    })();
-  }
-
-  // ——— Scriptlets — return per-hostname scriptlet codes ———
-  // ——— Scriptlets — inject via chrome.scripting (CSP-safe MAIN world) ———
-  if (msg.type === 'INJECT_SCRIPTLETS') {
-    try {
-      const host = msg.hostname || '';
-      const tabId = sender.tab?.id;
-      if (!tabId) { sendResponse({ injected: 0 }); return true; }
-      const rules = (engine.scriptletRules && engine.scriptletRules[host]) || [];
-      const globalRules = (engine.scriptletRules && engine.scriptletRules['*']) || [];
-      const allRules = [...globalRules, ...rules];
-      let injected = 0;
-      for (const r of allRules) {
-        const code = buildScriptletCode(r.name, r.args);
-        if (!code) continue;
-        try {
-          chrome.scripting.executeScript({
-            target: { tabId, allFrames: false },
-            world: 'MAIN',
-            func: function(scriptletCode) {
-              try {
-                const s = document.createElement('script');
-                s.textContent = scriptletCode;
-                (document.head || document.documentElement).appendChild(s);
-                s.remove();
-              } catch (e) {}
-            },
-            args: [code]
-          }).catch(() => {});
-          injected++;
-        } catch (e) {}
-      }
-      sendResponse({ injected });
-    } catch (e) { sendResponse({ injected: 0 }); }
-  }
-
-  if (msg.type === 'GET_SCRIPTLETS') {
-    try {
-      const host = msg.hostname || '';
-      const rules = (engine.scriptletRules && engine.scriptletRules[host]) || [];
-      const globalRules = (engine.scriptletRules && engine.scriptletRules['*']) || [];
-      const allRules = [...globalRules, ...rules];
-      const codes = [];
-      for (const r of allRules) {
-        const code = buildScriptletCode(r.name, r.args);
-        if (code) codes.push(code);
-      }
-      sendResponse({ scriptlets: codes });
-    } catch (e) { sendResponse({ scriptlets: [] }); }
-  }
-
-  // ——— Procedural Cosmetic Filters — return per-hostname procedural rules ———
-  if (msg.type === 'GET_PROCEDURAL_FILTERS') {
-    try {
-      const host = msg.hostname || '';
-      const filters = [];
-      if (engine.proceduralFilters) {
-        for (const pf of engine.proceduralFilters) {
-          if (!pf.host || pf.host === '' || host.includes(pf.host)) filters.push(pf.selector);
-        }
-      }
-      sendResponse({ filters });
-    } catch (e) { sendResponse({ filters: [] }); }
-  }
-
-  return true;
 });
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === 'block-element') chrome.tabs.sendMessage(tab.id, { type: 'PICK_ELEMENT' });
+  if (info.menuItemId === 'block-element' && tab?.id != null) {
+    chrome.tabs.sendMessage(tab.id, { type: 'PICK_ELEMENT' }).catch(e => logError('pick-element-send', e));
+  }
 });
 
 chrome.webNavigation.onCommitted.addListener((d) => {
   if (d.frameId !== 0) return;
   if (!['typed','auto_bookmark','generated','keyword','keyword_generated','link'].includes(d.transitionType)) return;
-  try { const h = new URL(d.url).hostname; if (tabUrls[d.tabId] === h) return; tabUrls[d.tabId] = h; } catch (e) {}
-  stats[d.tabId] = 0; tabDoms[d.tabId] = {}; updateBadge(d.tabId, 0);
-  saveSession();
+  const h = safeHostname(d.url);
+  if (h && tabUrls[d.tabId] === h) return;
+  if (h) tabUrls[d.tabId] = h;
+  stats[d.tabId] = 0;
+  tabDoms[d.tabId] = {};
+  updateBadge(d.tabId, 0);
+  markDirty();
 });
 
-chrome.tabs.onRemoved.addListener((id) => { delete stats[id]; delete tabDoms[id]; delete tabUrls[id]; saveSession(); });
+chrome.tabs.onRemoved.addListener((id) => {
+  delete stats[id]; delete tabDoms[id]; delete tabUrls[id];
+  markDirty();
+});
 
 chrome.alarms.create('autoSave', { periodInMinutes: 0.5 });
 chrome.alarms.create('updateFilters', { periodInMinutes: 1440 });
 chrome.alarms.onAlarm.addListener((a) => {
-  if (a.name === 'autoSave') saveSession();
+  if (a.name === 'autoSave') flushIfDirty();
   if (a.name === 'updateFilters') updateFilterLists();
 });
 
+// declarativeNetRequest debug listener — guard registration
+try {
+  if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
+    chrome.declarativeNetRequest.onRuleMatchedDebug.addListener((info) => {
+      if (info.request.tabId < 0) return;
+      const tabId = info.request.tabId;
+      stats[tabId] = (stats[tabId] || 0) + 1;
+      updateBadge(tabId, stats[tabId]);
+
+      const h = safeHostname(info.request.url);
+      if (h) {
+        globalStats.perSite[h] = (globalStats.perSite[h] || 0) + 1;
+        if (!tabDoms[tabId]) tabDoms[tabId] = {};
+        if (!tabDoms[tabId][h]) tabDoms[tabId][h] = { count: 0, type: info.request.type || 'other' };
+        tabDoms[tabId][h].count++;
+        blockedLog.unshift({ url: info.request.url, domain: h, type: info.request.type || 'other', timestamp: Date.now(), tabId });
+        if (blockedLog.length > MAX_LOG) blockedLog.length = MAX_LOG;
+
+        const src = safeHostname(info.request.documentUrl);
+        if (src && src !== h) {
+          try { trackerLearner.recordSighting(h, src); } catch (e) { logError('learner:onRuleMatched', e); }
+        }
+      }
+
+      incrementBlockedCount(1);
+      markDirty(); // throttled — actual write happens on the alarm
+    });
+  }
+} catch (e) { logError('register:onRuleMatchedDebug', e); }
+
+// ════════════════════════════════════════════════════════════════
+// HANDLERS — dispatch map (was 200+ lines of if/else)
+// ════════════════════════════════════════════════════════════════
+
+const HANDLERS = {
+
+  CHECK_URL: (msg, sender, sendResponse) => {
+    sendResponse({ blocked: isEnabled && engine.shouldBlock(msg.url, msg.sourceUrl) });
+  },
+
+  GET_COSMETIC_FILTERS: (msg, sender, sendResponse) => {
+    sendResponse({ selectors: engine.getCosmeticSelectors(msg.hostname) });
+  },
+
+  GET_STATE: async (msg, sender, sendResponse) => {
+    const stored = await chrome.storage.local.get(['whitelist', 'enabled']);
+    whitelist = stored.whitelist || [];
+    isEnabled = stored.enabled !== undefined ? stored.enabled : true;
+    sendResponse({
+      enabled: isEnabled,
+      blockedCount: stats[sender.tab?.id] || 0,
+      totalBlocked: globalStats.totalBlocked,
+      whitelist,
+    });
+  },
+
+  GET_TAB_STATS: (msg, sender, sendResponse) => {
+    sendResponse({
+      enabled: isEnabled,
+      blockedCount: stats[msg.tabId] || 0,
+      totalBlocked: globalStats.totalBlocked,
+      whitelist,
+    });
+  },
+
+  GET_POPUP_OVERVIEW: async (msg, sender, sendResponse) => {
+    const stored = await chrome.storage.local.get(['sinceInstall', 'whitelist']);
+    const si = stored.sinceInstall || { totalBlocked: 0, installDate: null };
+    whitelist = stored.whitelist || [];
+    const d = tabDoms[msg.tabId] || {};
+    const sorted = Object.entries(d)
+      .map(([k, v]) => ({ domain: k, count: v.count, type: v.type }))
+      .sort((a, b) => b.count - a.count);
+    const cats = { ads: 0, trackers: 0, social: 0, other: 0 };
+    for (const { domain: dm } of sorted) {
+      if (/google|doubleclick|googlesyndication|taboola|outbrain|adnxs|criteo|pubmatic|amazon-adsystem|ads\.|adform/.test(dm)) cats.ads++;
+      else if (/analytics|hotjar|mixpanel|clarity|segment|optimizely|chartbeat|scorecard|quantserve|demdex|moatads/.test(dm)) cats.trackers++;
+      else if (/facebook|twitter|linkedin|instagram|snap\.licdn|pixel\.facebook/.test(dm)) cats.social++;
+      else cats.other++;
+    }
+    sendResponse({
+      enabled: isEnabled,
+      blockedCount: stats[msg.tabId] || 0,
+      totalBlocked: si.totalBlocked,
+      sinceInstall: si,
+      uniqueDomains: sorted.length,
+      domains: sorted.slice(0, 15),
+      categories: cats,
+      whitelist,
+    });
+  },
+
+  TOGGLE: async (msg, sender, sendResponse) => {
+    isEnabled = !isEnabled;
+    await chrome.storage.local.set({ enabled: isEnabled });
+    sendResponse({ enabled: isEnabled });
+  },
+
+  ADD_WHITELIST: async (msg, sender, sendResponse) => {
+    const stored = await chrome.storage.local.get('whitelist');
+    const wl = stored.whitelist || [];
+    const d = String(msg.domain || '').replace(/^www\./, '').trim();
+    if (!d) { sendResponse({ whitelist: wl, error: 'empty_domain' }); return; }
+    if (!wl.includes(d)) wl.push(d);
+    await chrome.storage.local.set({ whitelist: wl });
+    whitelist = wl;
+    sendResponse({ whitelist: wl });
+  },
+
+  REMOVE_WHITELIST: async (msg, sender, sendResponse) => {
+    const stored = await chrome.storage.local.get('whitelist');
+    const wl = (stored.whitelist || []).filter(d => d !== msg.domain);
+    await chrome.storage.local.set({ whitelist: wl });
+    whitelist = wl;
+    sendResponse({ whitelist: wl });
+  },
+
+  REPORT_BLOCKED: (msg, sender, sendResponse) => {
+    const tabId = sender.tab?.id;
+    const count = Math.max(1, Math.min(100, msg.count || 1)); // clamp to sane range
+    if (tabId == null) return;
+    stats[tabId] = (stats[tabId] || 0) + count;
+    updateBadge(tabId, stats[tabId]);
+
+    // FIX #5 — null-safe hostname extraction
+    const h = safeSenderHostname(sender);
+    if (h) {
+      globalStats.perSite[h] = (globalStats.perSite[h] || 0) + count;
+      if (!tabDoms[tabId]) tabDoms[tabId] = {};
+      if (!tabDoms[tabId][h]) tabDoms[tabId][h] = { count: 0, type: 'cosmetic' };
+      tabDoms[tabId][h].count += count;
+    }
+
+    incrementBlockedCount(count);
+    markDirty();
+  },
+
+  RESET_STATS: async (msg, sender, sendResponse) => {
+    globalStats = { totalBlocked: 0, perSite: {} };
+    stats = {};
+    blockedLog = [];
+    tabDoms = {};
+    await chrome.storage.local.set({ globalStats, stats: {}, blockedLog: [], tabDoms: {} });
+    sendResponse({ success: true });
+  },
+
+  GET_DASHBOARD_DATA: async (msg, sender, sendResponse) => {
+    const stored = await chrome.storage.local.get(['sinceInstall', 'whitelist']);
+    const si = stored.sinceInstall || { totalBlocked: 0, installDate: null };
+    whitelist = stored.whitelist || [];
+    const top = Object.entries(globalStats.perSite).sort((a, b) => b[1] - a[1]).slice(0, 50);
+    const cats = {};
+    for (const e of blockedLog) {
+      const d = e.domain || ''; let c = 'Other';
+      if (/google|doubleclick|googlesyndication|googleadservices|googletagmanager|google-analytics|imasdk/.test(d)) c = 'Google Ads & Tracking';
+      else if (/facebook|fbevents|pixel\.facebook/.test(d)) c = 'Facebook / Meta';
+      else if (/taboola|outbrain|mgid|revcontent/.test(d)) c = 'Native Ads';
+      else if (/criteo|pubmatic|adnxs|rubiconproject|openx|indexexchange/.test(d)) c = 'Programmatic / RTB';
+      else if (/amazon-adsystem|ads\.twitter|ads\.linkedin|bat\.bing/.test(d)) c = 'Platform Ads';
+      else if (/hotjar|mixpanel|clarity|chartbeat|scorecardresearch|demdex|moatads/.test(d)) c = 'Trackers & Analytics';
+      else if (/adroll|viglink|liveintent|adform|adsrvr/.test(d)) c = 'Ad Networks';
+      cats[c] = (cats[c] || 0) + 1;
+    }
+    sendResponse({
+      enabled: isEnabled,
+      totalBlocked: si.totalBlocked,
+      sinceInstall: si,
+      topSites: top,
+      blockedLog: blockedLog.slice(0, 200),
+      categories: cats,
+      whitelist,
+      networkRuleCount: engine.networkFilters.length,
+      cosmeticRuleCount: engine.cosmeticFilters.length,
+      exceptionCount: engine.exceptions.length,
+      trackerLearner: trackerLearner.getStats(),
+      learnedTrackers: trackerLearner.getLearnedTrackers().slice(0, 50),
+      filterListStats: filterListManager.getStats(),
+    });
+  },
+
+  GET_PRO_SETTINGS: async (msg, sender, sendResponse) => {
+    const d = await chrome.storage.local.get('proSettings');
+    sendResponse(d.proSettings || {
+      adBlocking: true, fingerprintProtection: true, cookieAutoReject: true,
+      annoyanceBlocking: true, minerBlocking: true, antiAdblock: true,
+    });
+  },
+
+  SET_PRO_SETTINGS: async (msg, sender, sendResponse) => {
+    await chrome.storage.local.set({ proSettings: msg.settings });
+    sendResponse({ success: true });
+  },
+
+  ALLOW_LEARNED_TRACKER: (msg, sender, sendResponse) => {
+    trackerLearner.allowDomain(msg.domain);
+    sendResponse({ success: true });
+  },
+
+  UPDATE_ALL_FILTER_LISTS: async (msg, sender, sendResponse) => {
+    await updateFilterLists();
+    sendResponse({ success: true });
+  },
+
+  CLEAR_BLOCKED_LOG: async (msg, sender, sendResponse) => {
+    blockedLog = [];
+    await chrome.storage.local.set({ blockedLog: [] });
+    sendResponse({ success: true });
+  },
+
+  INJECT_SCRIPTLETS: async (msg, sender, sendResponse) => {
+    // FIX #2 — allowlist-gated. buildScriptletCode returns null for
+    // anything not in SCRIPTLET_ALLOWLIST.
+    const claimedHost = String(msg.hostname || '').slice(0, 200);
+    const tabId = sender.tab?.id;
+    if (tabId == null) { sendResponse({ injected: 0 }); return; }
+
+    // FIX #3 (defense in depth) — content script's claimed hostname must
+    // match its actual tab URL. A compromised content script can't pretend
+    // it's on a different site to trigger scriptlets meant for that site.
+    const actualHost = safeSenderHostname(sender);
+    if (!actualHost || actualHost !== claimedHost) {
+      logError('inject:host-mismatch', `claimed=${claimedHost} actual=${actualHost}`);
+      sendResponse({ injected: 0, error: 'host_mismatch' });
+      return;
+    }
+
+    const rules = (engine.scriptletRules && engine.scriptletRules[claimedHost]) || [];
+    const globalRules = (engine.scriptletRules && engine.scriptletRules['*']) || [];
+    const allRules = [...globalRules, ...rules];
+
+    let injected = 0;
+    for (const r of allRules) {
+      if (!isScriptletAllowed(r.name)) continue; // belt-and-braces
+      const code = buildScriptletCode(r.name, r.args);
+      if (!code) continue;
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId, allFrames: false },
+          world: 'MAIN',
+          func: function(scriptletCode) {
+            try {
+              const s = document.createElement('script');
+              s.textContent = scriptletCode;
+              (document.head || document.documentElement).appendChild(s);
+              s.remove();
+            } catch (e) {}
+          },
+          args: [code],
+        });
+        injected++;
+      } catch (e) { logError('injectScriptlet', e); }
+    }
+    sendResponse({ injected });
+  },
+
+  GET_SCRIPTLETS: (msg, sender, sendResponse) => {
+    const host = String(msg.hostname || '').slice(0, 200);
+    const rules = (engine.scriptletRules && engine.scriptletRules[host]) || [];
+    const globalRules = (engine.scriptletRules && engine.scriptletRules['*']) || [];
+    const allRules = [...globalRules, ...rules];
+    const codes = [];
+    for (const r of allRules) {
+      if (!isScriptletAllowed(r.name)) continue;
+      const code = buildScriptletCode(r.name, r.args);
+      if (code) codes.push(code);
+    }
+    sendResponse({ scriptlets: codes });
+  },
+
+  GET_PROCEDURAL_FILTERS: (msg, sender, sendResponse) => {
+    const host = String(msg.hostname || '').slice(0, 200);
+    const filters = [];
+    if (engine.proceduralFilters) {
+      for (const pf of engine.proceduralFilters) {
+        if (!pf.host || pf.host === '' || host.includes(pf.host)) filters.push(pf.selector);
+      }
+    }
+    sendResponse({ filters });
+  },
+
+  GET_DEBUG_INFO: (msg, sender, sendResponse) => {
+    sendResponse({
+      version: '2.0.3',
+      initDone,
+      networkRules: engine.networkFilters.length,
+      cosmeticRules: engine.cosmeticFilters.length,
+      scriptletRuleHosts: Object.keys(engine.scriptletRules || {}).length,
+      errorCount: self.__zenithErrorCount || 0,
+      lastError: self.__zenithLastError || null,
+      uptime: Date.now() - (self.__zenithStart || Date.now()),
+    });
+  },
+};
+
+// ════════════════════════════════════════════════════════════════
+// Helpers
+// ════════════════════════════════════════════════════════════════
 
 function updateBadge(tabId, count) {
-  try { chrome.action.setBadgeText({ text: count > 999 ? '999+' : String(count), tabId }); chrome.action.setBadgeBackgroundColor({ color: '#e74c3c', tabId }); } catch (e) {}
+  try {
+    chrome.action.setBadgeText({ text: count > 999 ? '999+' : String(count), tabId });
+    chrome.action.setBadgeBackgroundColor({ color: '#e74c3c', tabId });
+  } catch (e) { logError('updateBadge', e); }
 }
 
 async function syncDynamicRules() {
@@ -311,10 +469,20 @@ async function syncDynamicRules() {
     const old = await chrome.declarativeNetRequest.getDynamicRules();
     const T = ['main_frame','sub_frame','stylesheet','script','image','font','xmlhttprequest','ping','media','other'];
     const rules = []; let id = 1000;
-    for (const f of engine.networkFilters) { if (id >= 5999 || !f.pattern || f.pattern.length < 3) continue; rules.push({ id: id++, priority: 1, action: { type: 'block' }, condition: { urlFilter: f.pattern, resourceTypes: f.resourceTypes?.length ? f.resourceTypes : T } }); }
-    for (const f of engine.exceptions) { if (id >= 5999 || !f.pattern || f.pattern.length < 3) continue; rules.push({ id: id++, priority: 2, action: { type: 'allow' }, condition: { urlFilter: f.pattern, resourceTypes: T } }); }
-
-    // REDIRECT RULES — replace common trackers with neutered versions so pages don't break
+    for (const f of engine.networkFilters) {
+      if (id >= 5999 || !f.pattern || f.pattern.length < 3) continue;
+      rules.push({
+        id: id++, priority: 1, action: { type: 'block' },
+        condition: { urlFilter: f.pattern, resourceTypes: f.resourceTypes?.length ? f.resourceTypes : T },
+      });
+    }
+    for (const f of engine.exceptions) {
+      if (id >= 5999 || !f.pattern || f.pattern.length < 3) continue;
+      rules.push({
+        id: id++, priority: 2, action: { type: 'allow' },
+        condition: { urlFilter: f.pattern, resourceTypes: T },
+      });
+    }
     const redirects = [
       { id: 9001, urlFilter: 'google-analytics.com/analytics.js', file: 'redirects/google-analytics.js' },
       { id: 9002, urlFilter: 'google-analytics.com/ga.js', file: 'redirects/google-analytics.js' },
@@ -324,33 +492,73 @@ async function syncDynamicRules() {
     ];
     for (const r of redirects) {
       rules.push({
-        id: r.id,
-        priority: 100,
+        id: r.id, priority: 100,
         action: { type: 'redirect', redirect: { extensionPath: '/' + r.file } },
-        condition: { urlFilter: r.urlFilter, resourceTypes: ['script'] }
+        condition: { urlFilter: r.urlFilter, resourceTypes: ['script'] },
       });
     }
-
-    await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: old.map(r => r.id), addRules: rules.slice(0, 5000) });
-  } catch (e) {}
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: old.map(r => r.id),
+      addRules: rules.slice(0, 5000),
+    });
+  } catch (e) { logError('syncDynamicRules', e); }
 }
 
 async function updateFilterLists() {
   try {
-    engine.networkFilters = []; engine.cosmeticFilters = []; engine.exceptions = [];
-    const r = await fetch(chrome.runtime.getURL('rules/default-filters.txt')); engine.parse(await r.text());
+    engine.networkFilters = [];
+    engine.cosmeticFilters = [];
+    engine.exceptions = [];
+
+    // Default rules (bundled) — also sanitized for consistency, even though
+    // they're not network-fetched.
+    try {
+      const r = await fetch(chrome.runtime.getURL('rules/default-filters.txt'));
+      const { text } = sanitizeFilterList(await r.text());
+      engine.parse(text);
+    } catch (e) { logError('updateFilterLists:default', e); }
+
+    // Remote lists — fetched via FilterListManager which already
+    // sanitizes via sanitizeFilterList() in fetchList().
     const res = await filterListManager.updateAll();
-    for (const x of res) { if (x.success) { const t = await filterListManager.getCachedList(x.id); if (t) engine.parse(t); } }
+    for (const x of res) {
+      if (!x.success) continue;
+      try {
+        const t = await filterListManager.getCachedList(x.id);
+        if (!t) continue;
+        // Defense in depth — sanitize again even though it's pre-sanitized.
+        const { text } = sanitizeFilterList(t);
+        engine.parse(text);
+      } catch (e) { logError(`updateFilterLists:parse:${x.id}`, e); }
+    }
     await syncDynamicRules();
-  } catch (e) {}
+  } catch (e) { logError('updateFilterLists', e); }
 }
 
 async function init() {
-  try { const r = await fetch(chrome.runtime.getURL('rules/default-filters.txt')); engine.parse(await r.text()); } catch (e) {}
+  self.__zenithStart = Date.now();
+
+  // Load default filters (sanitized)
+  try {
+    const r = await fetch(chrome.runtime.getURL('rules/default-filters.txt'));
+    const { text } = sanitizeFilterList(await r.text());
+    engine.parse(text);
+  } catch (e) { logError('init:default-filters', e); }
+
+  // Load cached remote lists (sanitized again — defense in depth)
   try {
     await filterListManager.init();
-    for (const l of filterListManager.getEnabledLists()) { try { const c = await filterListManager.getCachedList(l.id); if (c) engine.parse(c); } catch (e) {} }
-  } catch (e) {}
+    for (const l of filterListManager.getEnabledLists()) {
+      try {
+        const c = await filterListManager.getCachedList(l.id);
+        if (!c) continue;
+        const { text } = sanitizeFilterList(c);
+        engine.parse(text);
+      } catch (e) { logError(`init:cached:${l.id}`, e); }
+    }
+  } catch (e) { logError('init:filterListManager', e); }
+
+  // Restore session state
   try {
     const d = await chrome.storage.local.get(['enabled','whitelist','globalStats','blockedLog','stats','tabDoms','tabUrls']);
     if (d.enabled !== undefined) isEnabled = d.enabled;
@@ -360,57 +568,33 @@ async function init() {
     if (d.stats) stats = d.stats;
     if (d.tabDoms) tabDoms = d.tabDoms;
     if (d.tabUrls) tabUrls = d.tabUrls;
-  } catch (e) {}
+  } catch (e) { logError('init:restore-session', e); }
 
+  // Reconcile sinceInstall from sync (handles browser-data-clear)
   try {
     const local = await chrome.storage.local.get('sinceInstall');
-    const sync = await chrome.storage.sync.get('sinceInstall');
+    const sync  = await chrome.storage.sync.get('sinceInstall');
     const localSI = local.sinceInstall || { totalBlocked: 0, installDate: null };
-    const syncSI = sync.sinceInstall || { totalBlocked: 0, installDate: null };
+    const syncSI  = sync.sinceInstall  || { totalBlocked: 0, installDate: null };
     if (syncSI.totalBlocked > localSI.totalBlocked) {
       await chrome.storage.local.set({ sinceInstall: syncSI });
       globalStats.totalBlocked = Math.max(globalStats.totalBlocked, syncSI.totalBlocked);
     }
     if (!localSI.installDate && syncSI.installDate) {
-      const merged = { ...localSI, installDate: syncSI.installDate };
-      await chrome.storage.local.set({ sinceInstall: merged });
+      await chrome.storage.local.set({ sinceInstall: { ...localSI, installDate: syncSI.installDate } });
     }
-  } catch (e) {}
+  } catch (e) { logError('init:sinceInstall-reconcile', e); }
 
-  await trackerLearner.load();
+  try { await trackerLearner.load(); } catch (e) { logError('init:trackerLearner.load', e); }
   await syncDynamicRules();
 
-  try { const tabs = await chrome.tabs.query({}); for (const t of tabs) { if (stats[t.id] > 0) updateBadge(t.id, stats[t.id]); } } catch (e) {}
+  try {
+    const tabs = await chrome.tabs.query({});
+    for (const t of tabs) if (stats[t.id] > 0) updateBadge(t.id, stats[t.id]);
+  } catch (e) { logError('init:badge-restore', e); }
 
   initDone = true;
-
-  try {
-    const d = await chrome.storage.local.get('sinceInstall');
-    console.log(`[Zenith] Ready — rules:${engine.networkFilters.length} sinceInstall:${(d.sinceInstall||{}).totalBlocked||0}`);
-  } catch (e) {}
+  console.log(`[Zenith] v1.1 ready — network:${engine.networkFilters.length} cosmetic:${engine.cosmeticFilters.length}`);
 }
-
-try {
-  if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
-    chrome.declarativeNetRequest.onRuleMatchedDebug.addListener((info) => {
-      if (info.request.tabId < 0) return;
-      const tabId = info.request.tabId;
-      stats[tabId] = (stats[tabId] || 0) + 1;
-      updateBadge(tabId, stats[tabId]);
-      try {
-        const h = new URL(info.request.url).hostname;
-        globalStats.perSite[h] = (globalStats.perSite[h] || 0) + 1;
-        if (!tabDoms[tabId]) tabDoms[tabId] = {};
-        if (!tabDoms[tabId][h]) tabDoms[tabId][h] = { count: 0, type: info.request.type || 'other' };
-        tabDoms[tabId][h].count++;
-        blockedLog.unshift({ url: info.request.url, domain: h, type: info.request.type || 'other', timestamp: Date.now(), tabId });
-        if (blockedLog.length > MAX_LOG) blockedLog.length = MAX_LOG;
-        try { const src = info.request.documentUrl ? new URL(info.request.documentUrl).hostname : ''; if (src && src !== h) trackerLearner.recordSighting(h, src); } catch (e) {}
-      } catch (e) {}
-      incrementBlockedCount(1);
-      saveSession();
-    });
-  }
-} catch (e) {}
 
 init();
