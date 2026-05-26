@@ -4,12 +4,12 @@
   // Zenith Fingerprint Protection — Selective Mode
   // ──────────────────────────────────────────────
   //
-  // v2.0.2 applied canvas noise on EVERY toDataURL() call, which broke
+  // v1.0 applied canvas noise on EVERY toDataURL() call, which broke
   // legitimate apps (drawing tools, games, screenshot exporters) and was
   // trivially detectable by sites that compare two consecutive toDataURL
   // calls on the same canvas (they would differ by 1 pixel each time).
   //
-  // v2.0.3 uses a heuristic: noise is ONLY applied when the call pattern
+  // v1.1 uses a heuristic: noise is ONLY applied when the call pattern
   // matches fingerprinting:
   //
   //   1. Canvas is small (<= 300x150 — the standard fingerprint size)
