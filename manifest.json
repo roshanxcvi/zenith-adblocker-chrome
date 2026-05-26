@@ -70,5 +70,8 @@
       ],
       "matches": ["<all_urls>"]
     }
-  ]
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' https://easylist.to https://pgl.yoyo.org https://secure.fanboy.co.nz https://malware-filter.gitlab.io https://easylist-downloads.adblockplus.org; img-src 'self' data: https:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+  }
 }
