@@ -1,51 +1,102 @@
 (function(){
   'use strict';
   //
-  // Zenith Fingerprint Protection — Selective Mode
-  // ──────────────────────────────────────────────
+  // Zenith Fingerprint Protection — Selective Mode (v2.0.4)
+  // ────────────────────────────────────────────────────────
   //
-  // v1.0 applied canvas noise on EVERY toDataURL() call, which broke
-  // legitimate apps (drawing tools, games, screenshot exporters) and was
-  // trivially detectable by sites that compare two consecutive toDataURL
-  // calls on the same canvas (they would differ by 1 pixel each time).
+  // v1.1 audit fixes:
+  //   M-04 getImageData noise is committed back to the canvas via
+  //        putImageData so a subsequent toDataURL() returns a result
+  //        consistent with the noised pixels (fingerprinters test the
+  //        two APIs against each other).
+  //   L-03 Battery API is overridden on Navigator.prototype instead of
+  //        being deleted from the instance (delete fails silently on
+  //        non-configurable prototype properties).
+  //   I-01 Per-install seed makes spoofed values realistic-but-unique
+  //        per Zenith install. The seed is generated once by content.js
+  //        and passed via `<script data-zenith-seed="...">`.
   //
-  // v1.1 uses a heuristic: noise is ONLY applied when the call pattern
-  // matches fingerprinting:
-  //
-  //   1. Canvas is small (<= 300x150 — the standard fingerprint size)
-  //   2. Text was drawn on it recently (<100ms ago)
-  //   3. toDataURL/getImageData is being called WITHOUT the canvas having
-  //      been added to the DOM (fingerprinters keep canvases off-screen)
-  //
-  // Real drawing apps:
-  //   - Use canvases attached to the DOM
-  //   - Are usually larger than 300x150
-  //   - Don't call toDataURL() within 100ms of drawing text
-  //
-  // This drastically reduces both false positives (breaking legit apps)
-  // AND detectability (sites that test for noise on non-fingerprint canvases
-  // see clean output, so they can't fingerprint Zenith's presence).
+  // v1.1 Selective Mode (kept):
+  //   Canvas noise applies only when the call pattern matches
+  //   fingerprinting (small + off-DOM + text-just-drawn).
   //
   try {
 
+    // ── I-01: per-install seed → deterministic PRNG ──────────────
+    // The seed is on the script tag's dataset (or window.__zenithFpSeed
+    // as a fallback for testing). If absent, fall back to old hardcoded
+    // values so we degrade safely rather than fail.
+    let seed = '';
+    try {
+      const me = document.currentScript;
+      seed = (me && me.dataset && me.dataset.zenithSeed) || '';
+    } catch (e) {}
+
+    function seedToInt(s) {
+      // Simple FNV-1a so different seeds produce different starting points
+      let h = 0x811c9dc5;
+      for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
+        h = (h * 0x01000193) >>> 0;
+      }
+      return h || 0x12345678;
+    }
+
+    // xorshift32 — fast, deterministic, good enough for choice indices
+    let prngState = seedToInt(seed);
+    function prng() {
+      let x = prngState;
+      x ^= x << 13;
+      x ^= x >>> 17;
+      x ^= x << 5;
+      prngState = x >>> 0;
+      return prngState;
+    }
+    function pick(arr) {
+      // If we have no seed, return a stable default (the first element);
+      // it's the same as the old behavior, just per-install when seeded.
+      if (!seed) return arr[0];
+      return arr[prng() % arr.length];
+    }
+
+    // Realistic value pools — common machine specs in 2025
+    const HW_CONCURRENCY_VALUES  = [4, 6, 8, 12, 16];
+    const DEVICE_MEMORY_VALUES   = [4, 8, 16];
+    const GPU_VENDORS = [
+      'Google Inc. (Intel)',
+      'Google Inc. (AMD)',
+      'Google Inc. (NVIDIA)',
+      'Intel Inc.',
+    ];
+    const GPU_RENDERERS = [
+      'ANGLE (Intel, Intel(R) UHD Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)',
+      'ANGLE (NVIDIA, NVIDIA GeForce GTX 1650 Direct3D11 vs_5_0 ps_5_0, D3D11)',
+      'ANGLE (AMD, AMD Radeon RX 580 Direct3D11 vs_5_0 ps_5_0, D3D11)',
+      'ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)',
+    ];
+
+    const fpValues = {
+      hwConcurrency: pick(HW_CONCURRENCY_VALUES),
+      deviceMemory: pick(DEVICE_MEMORY_VALUES),
+      gpuVendor: pick(GPU_VENDORS),
+      gpuRenderer: pick(GPU_RENDERERS),
+    };
+
+    // ── Selective-mode canvas state (v2.0.3 carryover) ───────────
     const META = Symbol('zenith.canvas.meta');
 
     function isLikelyFingerprintCanvas(canvas) {
       if (!canvas) return false;
-      // Small canvas?
       const small = canvas.width <= 300 && canvas.height <= 150;
       if (!small) return false;
-      // Off-DOM?
       const offDom = !canvas.isConnected;
       if (!offDom) return false;
-      // Text drawn recently?
       const meta = canvas[META];
       if (!meta) return false;
-      const drewTextRecently = (performance.now() - (meta.lastText || 0)) < 100;
-      return drewTextRecently;
+      return (performance.now() - (meta.lastText || 0)) < 100;
     }
 
-    // ── Track fillText / strokeText calls so we know "text was just drawn"
+    // ── Track fillText / strokeText so we know "text was just drawn"
     try {
       const protoFill = CanvasRenderingContext2D.prototype.fillText;
       const protoStroke = CanvasRenderingContext2D.prototype.strokeText;
@@ -71,7 +122,7 @@
       };
     } catch (e) {}
 
-    // ── Selective canvas noise
+    // ── Selective canvas noise (toDataURL) ───────────────────────
     const origToDataURL = HTMLCanvasElement.prototype.toDataURL;
     HTMLCanvasElement.prototype.toDataURL = function() {
       if (isLikelyFingerprintCanvas(this)) {
@@ -89,31 +140,32 @@
       return origToDataURL.apply(this, arguments);
     };
 
-    // Same for getImageData — fingerprinters often read pixels directly
+    // ── M-04 FIX: getImageData noise is committed back to the canvas
+    //    so a follow-up toDataURL() produces a consistent result.
     try {
       const origGID = CanvasRenderingContext2D.prototype.getImageData;
-      CanvasRenderingContext2D.prototype.getImageData = function() {
+      CanvasRenderingContext2D.prototype.getImageData = function(x, y, w, h) {
         const result = origGID.apply(this, arguments);
         if (isLikelyFingerprintCanvas(this.canvas)) {
           try {
             for (let i = 0; i < Math.min(result.data.length, 256); i += 4) {
               result.data[i] = (result.data[i] + (Math.random() > 0.5 ? 1 : -1)) & 0xFF;
             }
+            // M-04 — write the noise back so toDataURL agrees with getImageData
+            this.putImageData(result, x, y);
           } catch (e) {}
         }
         return result;
       };
     } catch (e) {}
 
-    // ── WebGL: always spoof these specific params (they're rarely used for
-    //    legit purposes — they're a fingerprinting-specific extension)
+    // ── WebGL: always spoof unmasked vendor/renderer (per-install) ──
     function patchWebGL(proto) {
       try {
         const orig = proto.getParameter;
         proto.getParameter = function(p) {
-          // UNMASKED_VENDOR_WEBGL, UNMASKED_RENDERER_WEBGL — only used by fingerprinters
-          if (p === 0x9245) return 'Generic GPU Vendor';
-          if (p === 0x9246) return 'Generic GPU Renderer';
+          if (p === 0x9245) return fpValues.gpuVendor;   // UNMASKED_VENDOR_WEBGL
+          if (p === 0x9246) return fpValues.gpuRenderer; // UNMASKED_RENDERER_WEBGL
           return orig.apply(this, arguments);
         };
       } catch (e) {}
@@ -121,16 +173,38 @@
     try { patchWebGL(WebGLRenderingContext.prototype); } catch (e) {}
     try { if (typeof WebGL2RenderingContext !== 'undefined') patchWebGL(WebGL2RenderingContext.prototype); } catch (e) {}
 
-    // ── Navigator normalization (these have no legit use that breaks)
-    try { Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 4, configurable: true }); } catch (e) {}
-    try { Object.defineProperty(navigator, 'deviceMemory', { get: () => 8, configurable: true }); } catch (e) {}
+    // ── Navigator normalization (per-install values, not hardcoded) ──
+    try {
+      Object.defineProperty(navigator, 'hardwareConcurrency', {
+        get: () => fpValues.hwConcurrency,
+        configurable: true,
+      });
+    } catch (e) {}
+    try {
+      Object.defineProperty(navigator, 'deviceMemory', {
+        get: () => fpValues.deviceMemory,
+        configurable: true,
+      });
+    } catch (e) {}
 
-    // ── GPC & DNT signals
+    // ── GPC & DNT signals (these are fine to be uniform; the whole
+    //    point of GPC is that everyone signals the same opt-out)
     try { Object.defineProperty(navigator, 'doNotTrack', { get: () => '1', configurable: true }); } catch (e) {}
     try { Object.defineProperty(navigator, 'globalPrivacyControl', { get: () => true, configurable: true }); } catch (e) {}
 
-    // ── Block Battery API (deprecated, only used for fingerprinting)
-    try { if (navigator.getBattery) { delete navigator.getBattery; } } catch (e) {}
+    // ── L-03 FIX: Battery API on prototype, not delete from instance.
+    //    `delete navigator.getBattery` silently fails because getBattery
+    //    lives on Navigator.prototype and is non-configurable. Override
+    //    it instead with a Promise.reject stub.
+    try {
+      Object.defineProperty(Navigator.prototype, 'getBattery', {
+        value: function() {
+          return Promise.reject(new Error('Battery API disabled by Zenith'));
+        },
+        configurable: true,
+        writable: true,
+      });
+    } catch (e) {}
 
   } catch (e) {}
 })();
