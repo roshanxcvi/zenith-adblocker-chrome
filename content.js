@@ -39,8 +39,26 @@
   // ═══════════════════════════════════
   if (F.fp) {
     try {
+      // I-01 — fetch per-install seed so different Zenith installs return
+      // different (but consistent) spoofed values. Without this, every
+      // Zenith user reports the same hardwareConcurrency=4, deviceMemory=8,
+      // GPU strings, etc., which is itself a fingerprint of "user has Zenith".
+      let seed = null;
+      try {
+        const sd = await chrome.storage.local.get('zenithFpSeed');
+        seed = sd.zenithFpSeed || null;
+        if (!seed) {
+          // Generate one and persist it (this only happens once per install)
+          const a = new Uint32Array(4);
+          crypto.getRandomValues(a);
+          seed = `${a[0].toString(36)}${a[1].toString(36)}${a[2].toString(36)}${a[3].toString(36)}`;
+          await chrome.storage.local.set({ zenithFpSeed: seed });
+        }
+      } catch (e) {}
+
       const s = document.createElement('script');
       s.src = chrome.runtime.getURL('fingerprint.js');
+      if (seed) s.dataset.zenithSeed = seed;
       s.onload = () => s.remove();
       (document.head || document.documentElement)?.appendChild(s);
     } catch (e) {}
@@ -171,9 +189,23 @@ ytd-video-masthead-ad-v3-renderer{display:none!important}
       (document.head || document.documentElement)?.appendChild(style);
     } catch (e) {}
 
-    // Count for badge (twice only)
-    const countSelector = allSel.join(',');
+    // L-04 FIX — validate each selector individually before joining. A
+    // single malformed selector from a remote filter list will throw on
+    // querySelectorAll() and zero out the badge count. Filtering first
+    // ensures one bad rule doesn't kill counting for the whole page.
+    const validSelectors = [];
+    for (const s of allSel) {
+      try {
+        // querySelector throws synchronously on syntax errors. We discard
+        // the result; we only care whether the selector parses.
+        document.querySelector(s);
+        validSelectors.push(s);
+      } catch (_) { /* malformed selector — skip */ }
+    }
+    const countSelector = validSelectors.join(',');
+
     function countOnce() {
+      if (!countSelector) return; // nothing to count
       try {
         const count = document.querySelectorAll(countSelector).length;
         if (count > 0) send({ type: 'REPORT_BLOCKED', count });
@@ -191,6 +223,11 @@ ytd-video-masthead-ad-v3-renderer{display:none!important}
 
     // YouTube ad killer — only on youtube.com
     if (isYouTube) {
+      // M-03 — track interval and observer so SPA navigations don't
+      // stack multiple of each over the lifetime of the page.
+      let ytInterval = null;
+      let ytObserver = null;
+
       function killYouTubeAd() {
         let killed = 0;
         // Click skip button
@@ -214,16 +251,29 @@ ytd-video-masthead-ad-v3-renderer{display:none!important}
       function startYT() {
         const player = document.querySelector('#movie_player');
         if (!player) { setTimeout(startYT, 2000); return; }
+
+        // M-03 — clean up any previous observer/interval before creating
+        // new ones. Otherwise SPA route changes accumulate timers.
+        try { if (ytObserver) ytObserver.disconnect(); } catch (_) {}
+        if (ytInterval) { clearInterval(ytInterval); ytInterval = null; }
+
         // Watch ONLY player class changes — not subtree
-        const obs = new MutationObserver(() => {
+        ytObserver = new MutationObserver(() => {
           if (player.classList.contains('ad-showing')) killYouTubeAd();
         });
-        obs.observe(player, { attributes: true, attributeFilter: ['class'] });
+        ytObserver.observe(player, { attributes: true, attributeFilter: ['class'] });
+
         // Backup check every 1.5 seconds
-        setInterval(() => {
+        ytInterval = setInterval(() => {
           if (document.querySelector('.ad-showing')) killYouTubeAd();
         }, 1500);
       }
+
+      // M-03 — also clear timers when the page is unloaded
+      window.addEventListener('pagehide', () => {
+        try { if (ytObserver) ytObserver.disconnect(); } catch (_) {}
+        if (ytInterval) { clearInterval(ytInterval); ytInterval = null; }
+      });
 
       if (document.readyState === 'complete') setTimeout(startYT, 1000);
       else window.addEventListener('load', () => setTimeout(startYT, 1000));
