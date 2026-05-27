@@ -67,38 +67,93 @@
     statShowing.textContent = filtered.length.toLocaleString();
     statDomains.textContent = new Set(filtered.map(e => e.domain)).size.toLocaleString();
 
-    // Render rows
+    // H-01 FIX — clear and rebuild with DOM APIs (no innerHTML for any
+    // network-origin value). This was previously interpolating URLs and
+    // domains into a template string, with a fragile escape that broke
+    // if the domain contained characters that were re-encoded during
+    // HTML-escape (e.g. ampersands).
+    while (container.firstChild) container.removeChild(container.firstChild);
+
+    // Empty state
     if (filtered.length === 0) {
-      container.innerHTML = `
-        <div class="empty">
-          <h2>${logData.length === 0 ? 'Waiting for blocked requests...' : 'No requests match your filter'}</h2>
-          <p>${logData.length === 0 ? 'Browse the web in another tab and blocked requests will appear here live.' : 'Try changing the search query or selecting a different type.'}</p>
-        </div>`;
+      const empty = document.createElement('div');
+      empty.className = 'empty';
+      const h2 = document.createElement('h2');
+      h2.textContent = logData.length === 0
+        ? 'Waiting for blocked requests...'
+        : 'No requests match your filter';
+      const p = document.createElement('p');
+      p.textContent = logData.length === 0
+        ? 'Browse the web in another tab and blocked requests will appear here live.'
+        : 'Try changing the search query or selecting a different type.';
+      empty.appendChild(h2);
+      empty.appendChild(p);
+      container.appendChild(empty);
       return;
     }
 
-    // Show up to 300 most recent rows (performance)
-    const rows = filtered.slice(0, 300).map(e => {
+    // Build row DOM nodes (max 300 for performance). Every value is
+    // injected via textContent — there is NO path from a network-origin
+    // string into HTML parsing.
+    const frag = document.createDocumentFragment();
+    const slice = filtered.slice(0, 300);
+    for (const e of slice) {
       const age = Date.now() - e.timestamp;
       const timeStr = age < 60000 ? Math.floor(age/1000) + 's ago' :
                       age < 3600000 ? Math.floor(age/60000) + 'm ago' :
                       new Date(e.timestamp).toLocaleTimeString();
-      
-      const url = e.url || '';
-      const domain = e.domain || '';
-      const escUrl = url.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-      
-      return `
-        <div class="log-row">
-          <span class="col-time">${timeStr}</span>
-          <span class="col-type type-${e.type || 'other'}">${(e.type || 'other').slice(0, 5)}</span>
-          <span class="col-url" title="${escUrl}"><span class="domain">${domain}</span>${escUrl.replace(domain, '')}</span>
-          <span class="col-domain">${domain}</span>
-          <span class="col-action act-block">BLOCK</span>
-        </div>`;
-    }).join('');
 
-    container.innerHTML = rows;
+      const url = String(e.url || '');
+      const domain = String(e.domain || '');
+      const type = String(e.type || 'other');
+
+      const row = document.createElement('div');
+      row.className = 'log-row';
+
+      const timeCol = document.createElement('span');
+      timeCol.className = 'col-time';
+      timeCol.textContent = timeStr;
+      row.appendChild(timeCol);
+
+      const typeCol = document.createElement('span');
+      typeCol.className = 'col-type type-' + type.replace(/[^a-z0-9_-]/gi, '');
+      typeCol.textContent = type.slice(0, 5);
+      row.appendChild(typeCol);
+
+      const urlCol = document.createElement('span');
+      urlCol.className = 'col-url';
+      urlCol.title = url;
+      // Split the URL visually into "domain | rest" using separate text nodes
+      // — this gives us the "highlighted domain" effect without any HTML
+      // interpolation.
+      const domainSpan = document.createElement('span');
+      domainSpan.className = 'domain';
+      domainSpan.textContent = domain;
+      urlCol.appendChild(domainSpan);
+      // The remainder of the URL after the domain. We use indexOf instead
+      // of replace() because String#replace on a non-regex needle replaces
+      // only the first match and can leave stray characters from re-encoding.
+      const idx = url.indexOf(domain);
+      const remainder = idx === -1 ? url : url.slice(idx + domain.length);
+      if (remainder) {
+        urlCol.appendChild(document.createTextNode(remainder));
+      }
+      row.appendChild(urlCol);
+
+      const domainCol = document.createElement('span');
+      domainCol.className = 'col-domain';
+      domainCol.textContent = domain;
+      row.appendChild(domainCol);
+
+      const actCol = document.createElement('span');
+      actCol.className = 'col-action act-block';
+      actCol.textContent = 'BLOCK';
+      row.appendChild(actCol);
+
+      frag.appendChild(row);
+    }
+
+    container.appendChild(frag);
   }
 
   // Initial fetch + poll every 1 second
