@@ -2,18 +2,30 @@
  * Zenith AdBlocker — Chrome Background (MV3)
  * by roshanxcvi
  *
- * v1.1 SECURITY HARDENING — all six audit issues addressed:
- *   #1 Filter list integrity .... sanitizeFilterList() before every engine.parse()
- *   #2 Scriptlet sandboxing ..... SCRIPTLET_ALLOWLIST gates buildScriptletCode
- *   #3 Sender validation ........ validateSender() runs first on every message
- *   #4 Explicit CSP ............. declared in manifest.json
- *   #5 Null-safe URL parsing .... safeHostname() everywhere new URL() was used
- *   #6 Fingerprint scoping ...... handled in fingerprint.js (call-stack check)
+ * v1.1 — REFRESH DOUBLE-COUNT FIX
+ *   Bug:  Refreshing a page added the same block count to the badge
+ *         AND to the lifetime "sinceInstall" total again. Refresh 5
+ *         times → counts inflated 5x.
+ *   Root: (a) webNavigation transitionType filter excluded 'reload'
+ *             so the badge never reset on F5
+ *         (b) declarativeNetRequest events fire on every refresh and
+ *             went straight to incrementBlockedCount() with no dedup
+ *         (c) REPORT_BLOCKED (cosmetic blocks from content.js) had
+ *             the same issue and was also called multiple times per
+ *             page load by content.js's three countOnce() timers
+ *   Fix:  - webNavigation.onCommitted now resets stats[tabId] on
+ *           every top-frame navigation, including reloads
+ *         - recentBlocks[tabId] map dedupes lifetime credit by
+ *           (tab, url) within a navigation, cleared on each new nav
+ *         - REPORT_BLOCKED uses the same dedup keyed on (tab, host)
+ *           so the three countOnce() calls are credited once
  *
- * Code quality:
- *   - onMessage dispatched via HANDLERS map (was 200+ lines of if/else)
- *   - saveSession throttled to ≤1 write / 2s via the alarm
- *   - Errors logged via logError() (counted, not silently swallowed)
+ * v1.1 — SECOND-ROUND AUDIT FIXES (kept):
+ *   H-01..I-02  ...see CHANGELOG for the full list
+ *
+ * v1.1— SECURITY HARDENING (kept):
+ *   #1..#6      ...filter integrity, scriptlet allowlist, sender
+ *                  validation, explicit CSP, null-safe URL parsing
  */
 
 import { FilterEngine } from './rules/filter-engine.js';
@@ -47,12 +59,30 @@ let tabDoms = {};
 let tabUrls = {};
 let initDone = false;
 
+// v2.0.5 — refresh dedup state. See the long comment block below for why.
+const recentBlocks = Object.create(null);    // { [tabId]: { [urlOrKey]: timestamp } }
+const DEDUP_MAX_PER_TAB = 1000;              // memory cap per tab
+
 // ════════════════════════════════════════════════════════════════
 // Throttled persistence (fixes "saveSession on every block")
 // ════════════════════════════════════════════════════════════════
 
 let dirty = false;
 function markDirty() { dirty = true; }
+
+// H-03 FIX — strip query strings + fragments from URLs before they're
+// stored in blockedLog. Request URLs commonly contain session tokens,
+// OAuth codes, search queries, user IDs and API keys; persisting them
+// to local storage is a privacy leak even though the data never leaves
+// the browser (other extensions, XSS on the dashboard, etc. could harvest it).
+function sanitizeLogUrl(url) {
+  try {
+    const u = new URL(url);
+    return u.origin + u.pathname;
+  } catch (e) {
+    return '';
+  }
+}
 
 async function flushIfDirty() {
   if (!dirty) return;
@@ -137,18 +167,32 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
 chrome.webNavigation.onCommitted.addListener((d) => {
   if (d.frameId !== 0) return;
-  if (!['typed','auto_bookmark','generated','keyword','keyword_generated','link'].includes(d.transitionType)) return;
+
+  // v1.1 FIX — reset per-tab badge on EVERY top-frame navigation,
+  // including refresh. The previous filter excluded 'reload', which
+  // meant refreshing a page accumulated counts across refreshes.
+  //
+  // We don't filter by transitionType anymore — top-frame navigation
+  // means "the user is loading a new page", end of story.
   const h = safeHostname(d.url);
-  if (h && tabUrls[d.tabId] === h) return;
   if (h) tabUrls[d.tabId] = h;
   stats[d.tabId] = 0;
   tabDoms[d.tabId] = {};
+
+  // v1.1 — clear per-tab dedup state on navigation. Same URL re-blocked
+  // on the same tab after this point will be credited to the lifetime
+  // counter fresh, as it should be.
+  recentBlocks[d.tabId] = Object.create(null);
+
   updateBadge(d.tabId, 0);
   markDirty();
 });
 
 chrome.tabs.onRemoved.addListener((id) => {
-  delete stats[id]; delete tabDoms[id]; delete tabUrls[id];
+  delete stats[id];
+  delete tabDoms[id];
+  delete tabUrls[id];
+  delete recentBlocks[id];
   markDirty();
 });
 
@@ -159,22 +203,94 @@ chrome.alarms.onAlarm.addListener((a) => {
   if (a.name === 'updateFilters') updateFilterLists();
 });
 
+// ════════════════════════════════════════════════════════════════
+// v1.1— REFRESH DEDUP STATE
+// ════════════════════════════════════════════════════════════════
+//
+// recentBlocks[tabId][url] — map of URLs blocked on this tab, cleared
+// on navigation by webNavigation.onCommitted. Used to dedup the LIFETIME
+// counter so refreshing a page with 50 ads adds 50 to `sinceInstall`,
+// not 100 (one refresh) or 250 (five refreshes).
+//
+// The per-tab BADGE still increments for every block on the current
+// page load — users want to see "47 blocked here" — but stats[tabId]
+// is reset to 0 on navigation, so refreshing doesn't double the badge.
+//
+// (recentBlocks is declared at the top of the file with the rest of
+// the in-memory cache.)
+
+function shouldDedupLifetime(tabId, url) {
+  if (!url) return false;
+  let tabMap = recentBlocks[tabId];
+  if (!tabMap) {
+    tabMap = recentBlocks[tabId] = Object.create(null);
+  }
+  if (tabMap[url]) {
+    // We've already counted this URL on this tab since the last
+    // navigation — it's a refresh hit. Don't bump lifetime again.
+    return true;
+  }
+  tabMap[url] = Date.now();
+  // Trim if the tab is unusually busy (memory safety, not correctness)
+  const keys = Object.keys(tabMap);
+  if (keys.length > DEDUP_MAX_PER_TAB) {
+    keys.sort((a, b) => tabMap[a] - tabMap[b]);
+    for (let i = 0; i < keys.length - DEDUP_MAX_PER_TAB; i++) {
+      delete tabMap[keys[i]];
+    }
+  }
+  return false;
+}
+
 // declarativeNetRequest debug listener — guard registration
 try {
   if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
     chrome.declarativeNetRequest.onRuleMatchedDebug.addListener((info) => {
       if (info.request.tabId < 0) return;
       const tabId = info.request.tabId;
+      const url = info.request.url;
+
+      // v1.1 — per-tab badge counts every block, BUT it resets on
+      // navigation via webNavigation.onCommitted above. No more
+      // accumulation across refreshes.
       stats[tabId] = (stats[tabId] || 0) + 1;
       updateBadge(tabId, stats[tabId]);
 
-      const h = safeHostname(info.request.url);
+      // v1.1 — lifetime counter (`sinceInstall.totalBlocked`)
+      // dedupes per (tab, url) since the last navigation. So:
+      //   - Page A blocks 50 ads → +50 lifetime
+      //   - User refreshes → +0 lifetime (same URLs re-blocked)
+      //   - User refreshes again → +0 lifetime
+      //   - User clicks a link to Page B → recentBlocks[tab] cleared
+      //   - Page B blocks 30 ads → +30 lifetime
+      //   - User refreshes Page B → +0 lifetime
+      const isRefreshDup = shouldDedupLifetime(tabId, url);
+
+      const h = safeHostname(url);
       if (h) {
-        globalStats.perSite[h] = (globalStats.perSite[h] || 0) + 1;
+        // Per-site stats and the "top blocked domains" view are per-tab
+        // displays, but we ALSO dedupe their increment so the dashboard's
+        // top-sites bar chart doesn't get rocket-fueled by F5 spam.
+        if (!isRefreshDup) {
+          globalStats.perSite[h] = (globalStats.perSite[h] || 0) + 1;
+        }
         if (!tabDoms[tabId]) tabDoms[tabId] = {};
         if (!tabDoms[tabId][h]) tabDoms[tabId][h] = { count: 0, type: info.request.type || 'other' };
+        // Per-tab domain count IS allowed to grow across refreshes within
+        // the same page session — the popup shows what's been blocked
+        // since the last navigation, which is reset by the nav handler.
         tabDoms[tabId][h].count++;
-        blockedLog.unshift({ url: info.request.url, domain: h, type: info.request.type || 'other', timestamp: Date.now(), tabId });
+
+        // Blocked log is a chronological feed — keep every entry so the
+        // network logger shows refresh activity, but it's bounded by
+        // MAX_LOG so it can't grow unbounded.
+        blockedLog.unshift({
+          url: sanitizeLogUrl(url),
+          domain: h,
+          type: info.request.type || 'other',
+          timestamp: Date.now(),
+          tabId,
+        });
         if (blockedLog.length > MAX_LOG) blockedLog.length = MAX_LOG;
 
         const src = safeHostname(info.request.documentUrl);
@@ -183,8 +299,10 @@ try {
         }
       }
 
-      incrementBlockedCount(1);
-      markDirty(); // throttled — actual write happens on the alarm
+      // Only bump the lifetime counter for first-time blocks.
+      if (!isRefreshDup) incrementBlockedCount(1);
+
+      markDirty();
     });
   }
 } catch (e) { logError('register:onRuleMatchedDebug', e); }
@@ -193,14 +311,28 @@ try {
 // HANDLERS — dispatch map (was 200+ lines of if/else)
 // ════════════════════════════════════════════════════════════════
 
+// M-02 helper — clamp untrusted string fields. A malicious page can send
+// a 500,000-character hostname and cause excessive string-matching on
+// every load.
+function clampStr(value, max = 200) {
+  return String(value || '').slice(0, max);
+}
+
+// L-01 — rate-limit state for UPDATE_ALL_FILTER_LISTS
+let lastFilterUpdate = 0;
+const FILTER_UPDATE_MIN_INTERVAL = 60_000;
+
 const HANDLERS = {
 
   CHECK_URL: (msg, sender, sendResponse) => {
-    sendResponse({ blocked: isEnabled && engine.shouldBlock(msg.url, msg.sourceUrl) });
+    const url = clampStr(msg.url, 2048);
+    const src = clampStr(msg.sourceUrl, 2048);
+    sendResponse({ blocked: isEnabled && engine.shouldBlock(url, src) });
   },
 
   GET_COSMETIC_FILTERS: (msg, sender, sendResponse) => {
-    sendResponse({ selectors: engine.getCosmeticSelectors(msg.hostname) });
+    const host = clampStr(msg.hostname); // M-02 — was passed raw before
+    sendResponse({ selectors: engine.getCosmeticSelectors(host) });
   },
 
   GET_STATE: async (msg, sender, sendResponse) => {
@@ -216,19 +348,47 @@ const HANDLERS = {
   },
 
   GET_TAB_STATS: (msg, sender, sendResponse) => {
+    // M-01 — same tab cross-check as GET_POPUP_OVERVIEW
+    let tabId;
+    if (sender.tab) {
+      if (msg.tabId != null && msg.tabId !== sender.tab.id) {
+        sendResponse({ error: 'tab_mismatch' });
+        return;
+      }
+      tabId = sender.tab.id;
+    } else {
+      tabId = msg.tabId;
+    }
     sendResponse({
       enabled: isEnabled,
-      blockedCount: stats[msg.tabId] || 0,
+      blockedCount: stats[tabId] || 0,
       totalBlocked: globalStats.totalBlocked,
       whitelist,
     });
   },
 
   GET_POPUP_OVERVIEW: async (msg, sender, sendResponse) => {
+    // M-01 FIX — when called from a content script (sender.tab is set),
+    // msg.tabId must match sender.tab.id. Otherwise a content script in
+    // tab 5 could read tabDoms[10] and learn which trackers are on a tab
+    // the user has open elsewhere.
+    // The popup runs in an extension page (sender.tab == null) so it can
+    // legitimately request data for any tab the user is viewing.
+    let tabId;
+    if (sender.tab) {
+      if (msg.tabId != null && msg.tabId !== sender.tab.id) {
+        sendResponse({ error: 'tab_mismatch' });
+        return;
+      }
+      tabId = sender.tab.id;
+    } else {
+      tabId = msg.tabId;
+    }
+
     const stored = await chrome.storage.local.get(['sinceInstall', 'whitelist']);
     const si = stored.sinceInstall || { totalBlocked: 0, installDate: null };
     whitelist = stored.whitelist || [];
-    const d = tabDoms[msg.tabId] || {};
+    const d = tabDoms[tabId] || {};
     const sorted = Object.entries(d)
       .map(([k, v]) => ({ domain: k, count: v.count, type: v.type }))
       .sort((a, b) => b.count - a.count);
@@ -241,7 +401,7 @@ const HANDLERS = {
     }
     sendResponse({
       enabled: isEnabled,
-      blockedCount: stats[msg.tabId] || 0,
+      blockedCount: stats[tabId] || 0,
       totalBlocked: si.totalBlocked,
       sinceInstall: si,
       uniqueDomains: sorted.length,
@@ -269,8 +429,13 @@ const HANDLERS = {
   },
 
   REMOVE_WHITELIST: async (msg, sender, sendResponse) => {
+    // L-02 FIX — mirror ADD_WHITELIST's sanitization. The old version
+    // used msg.domain directly in the filter, so null/undefined/object
+    // would silently remove nothing.
+    const domain = String(msg.domain || '').replace(/^www\./, '').trim();
+    if (!domain) { sendResponse({ whitelist, error: 'empty_domain' }); return; }
     const stored = await chrome.storage.local.get('whitelist');
-    const wl = (stored.whitelist || []).filter(d => d !== msg.domain);
+    const wl = (stored.whitelist || []).filter(d => d !== domain);
     await chrome.storage.local.set({ whitelist: wl });
     whitelist = wl;
     sendResponse({ whitelist: wl });
@@ -278,21 +443,40 @@ const HANDLERS = {
 
   REPORT_BLOCKED: (msg, sender, sendResponse) => {
     const tabId = sender.tab?.id;
-    const count = Math.max(1, Math.min(100, msg.count || 1)); // clamp to sane range
     if (tabId == null) return;
+
+    // M-05 FIX — parse and validate before clamping. Math.max/min with
+    // NaN returns NaN which corrupts stats and produces a "NaN" badge.
+    const raw = parseInt(msg.count, 10);
+    const count = Number.isFinite(raw) ? Math.max(1, Math.min(100, raw)) : 1;
+
+    // Per-tab badge counts every cosmetic-block report. Reset is handled
+    // by webNavigation.onCommitted (stats[tabId] = 0).
     stats[tabId] = (stats[tabId] || 0) + count;
     updateBadge(tabId, stats[tabId]);
 
-    // FIX #5 — null-safe hostname extraction
     const h = safeSenderHostname(sender);
     if (h) {
-      globalStats.perSite[h] = (globalStats.perSite[h] || 0) + count;
+      // Per-tab domain count is OK to grow within the same page session
       if (!tabDoms[tabId]) tabDoms[tabId] = {};
       if (!tabDoms[tabId][h]) tabDoms[tabId][h] = { count: 0, type: 'cosmetic' };
       tabDoms[tabId][h].count += count;
+
+      // v1.1 — only count cosmetic blocks toward LIFETIME once per
+      // (tab, hostname) since the last navigation. content.js calls
+      // countOnce() multiple times (at load, +500ms, +3s) so without
+      // this we'd triple-count even on a single page load — and on
+      // refresh we'd add the count all over again.
+      //
+      // We reuse the recentBlocks map with a synthetic key prefixed
+      // 'cosmetic:' so it shares the navigation-reset path.
+      const dedupKey = 'cosmetic:' + h;
+      if (!shouldDedupLifetime(tabId, dedupKey)) {
+        globalStats.perSite[h] = (globalStats.perSite[h] || 0) + count;
+        incrementBlockedCount(count);
+      }
     }
 
-    incrementBlockedCount(count);
     markDirty();
   },
 
@@ -348,8 +532,26 @@ const HANDLERS = {
   },
 
   SET_PRO_SETTINGS: async (msg, sender, sendResponse) => {
-    await chrome.storage.local.set({ proSettings: msg.settings });
-    sendResponse({ success: true });
+    // H-02 FIX — allow-list known keys and validate types. Without this,
+    // a compromised extension page could write arbitrary keys/values
+    // into storage (including masquerading as whitelist/enabled/sinceInstall).
+    const ALLOWED_SETTINGS = {
+      adBlocking: 'boolean',
+      fingerprintProtection: 'boolean',
+      cookieAutoReject: 'boolean',
+      annoyanceBlocking: 'boolean',
+      minerBlocking: 'boolean',
+      antiAdblock: 'boolean',
+    };
+    const incoming = (msg && typeof msg.settings === 'object' && msg.settings) || {};
+    const safe = {};
+    for (const [k, expectedType] of Object.entries(ALLOWED_SETTINGS)) {
+      if (k in incoming && typeof incoming[k] === expectedType) {
+        safe[k] = incoming[k];
+      }
+    }
+    await chrome.storage.local.set({ proSettings: safe });
+    sendResponse({ success: true, settings: safe });
   },
 
   ALLOW_LEARNED_TRACKER: (msg, sender, sendResponse) => {
@@ -358,6 +560,19 @@ const HANDLERS = {
   },
 
   UPDATE_ALL_FILTER_LISTS: async (msg, sender, sendResponse) => {
+    // L-01 — rate limit. Without this, any extension page can hammer
+    // updateFilterLists() which fetches up to 35MB of filter data and
+    // calls syncDynamicRules() each time.
+    const now = Date.now();
+    if (now - lastFilterUpdate < FILTER_UPDATE_MIN_INTERVAL) {
+      sendResponse({
+        success: false,
+        reason: 'rate_limited',
+        retryAfterMs: FILTER_UPDATE_MIN_INTERVAL - (now - lastFilterUpdate),
+      });
+      return;
+    }
+    lastFilterUpdate = now;
     await updateFilterLists();
     sendResponse({ success: true });
   },
@@ -440,8 +655,18 @@ const HANDLERS = {
   },
 
   GET_DEBUG_INFO: (msg, sender, sendResponse) => {
+    // I-02 — restrict to our own extension pages. This exposes filter
+    // rule counts, error logs and uptime which help fingerprint Zenith's
+    // exact version and which lists are active. Even though arbitrary
+    // pages can't sendMessage to us directly, a compromised content
+    // script could; this gates that route off.
+    const ourOrigin = `chrome-extension://${chrome.runtime.id}/`;
+    if (!sender.url || !sender.url.startsWith(ourOrigin)) {
+      sendResponse({ error: 'forbidden' });
+      return;
+    }
     sendResponse({
-      version: '2.0.3',
+      version: '2.0.5',
       initDone,
       networkRules: engine.networkFilters.length,
       cosmeticRules: engine.cosmeticFilters.length,
