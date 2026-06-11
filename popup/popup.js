@@ -22,6 +22,37 @@ document.addEventListener('DOMContentLoaded', async () => {
   const catSocial = document.getElementById('cat-social');
   const catOther = document.getElementById('cat-other');
 
+  // H-B helpers (same as dashboard) — build DOM elements safely
+  function el(tag, props, children) {
+    const node = document.createElement(tag);
+    if (props) {
+      if (props.cls) node.className = props.cls;
+      if (props.text != null) node.textContent = String(props.text);
+      if (props.title != null) node.title = String(props.title);
+      if (props.data) for (const k in props.data) node.dataset[k] = String(props.data[k]);
+      if (props.on) for (const k in props.on) node.addEventListener(k, props.on[k]);
+    }
+    if (children) {
+      for (const c of children) {
+        if (c == null) continue;
+        node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+      }
+    }
+    return node;
+  }
+  function clearChildren(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+
+  // M-A — proper dot-anchored suffix match. Whitelist entry 'ads.com'
+  // matches 'ads.com' and 'sub.ads.com', but NOT 'ads.com.evil.com' or
+  // 'notads.com'. Single-letter entries like 'co' no longer match every
+  // .co domain.
+  function whitelistMatches(host, wlEntry) {
+    if (!host || !wlEntry) return false;
+    const h = String(host).toLowerCase().replace(/^www\./, '');
+    const w = String(wlEntry).toLowerCase().replace(/^www\./, '');
+    return h === w || h.endsWith('.' + w);
+  }
+
   // Get current tab
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   let domain = '—';
@@ -35,14 +66,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Safety check — if service worker was dead, data might be null
-  if (!data) {
+  if (!data || data.error) {
     blockedCount.textContent = '—';
     totalBlocked.textContent = '—';
     return;
   }
 
   // Populate stats
-  toggle.checked = data.enabled;
+  toggle.checked = !!data.enabled;
   blockedCount.textContent = data.blockedCount || 0;
   domainCountEl.textContent = data.uniqueDomains || 0;
   totalBlocked.textContent = fmt(data.totalBlocked || 0);
@@ -79,10 +110,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Domain list
   renderDomains(data.domains || []);
 
-  // Whitelist
-  const isWL = data.whitelist.some(d => domain.includes(d));
+  // Whitelist (M-A — dot-anchored suffix match instead of includes())
+  const isWL = (data.whitelist || []).some(d => whitelistMatches(domain, d));
   if (isWL) { whitelistBtn.textContent = 'Remove'; whitelistBtn.classList.add('active'); }
-  renderWhitelist(data.whitelist);
+  renderWhitelist(data.whitelist || []);
 
   // ——— HELPERS ———
 
@@ -107,34 +138,47 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function renderDomains(domains) {
+    clearChildren(domainList);
     if (!domains || domains.length === 0) {
-      domainList.innerHTML = '<div class="domain-empty">Browse a page to see blocked domains</div>';
+      domainList.appendChild(el('div', { cls: 'domain-empty', text: 'Browse a page to see blocked domains' }));
       return;
     }
-    domainList.innerHTML = domains.map(d => {
-      const cat = getDomainCategory(d.domain);
-      return `<div class="domain-row">
-        <span class="domain-icon ${cat.cls}">${cat.label}</span>
-        <span class="domain-name" title="${d.domain}">${d.domain}</span>
-        <span class="domain-count">${d.count}</span>
-      </div>`;
-    }).join('');
+    for (const d of domains) {
+      const dom = String(d.domain || '');
+      const cat = getDomainCategory(dom);
+      // Sanitize cat.cls — it's already from our hardcoded map so safe,
+      // but be defensive in case CAT logic changes.
+      const safeCls = cat.cls.replace(/[^a-z0-9_-]/gi, '');
+      const row = el('div', { cls: 'domain-row' }, [
+        el('span', { cls: 'domain-icon ' + safeCls, text: cat.label }),
+        el('span', { cls: 'domain-name', text: dom, title: dom }),
+        el('span', { cls: 'domain-count', text: String(d.count || 0) }),
+      ]);
+      domainList.appendChild(row);
+    }
   }
 
   function renderWhitelist(list) {
-    whitelistDisplay.innerHTML = '';
+    clearChildren(whitelistDisplay);
     emptyMsg.style.display = list.length ? 'none' : 'block';
     for (const d of list) {
-      const li = document.createElement('li');
-      li.innerHTML = `<span>${d}</span><button data-domain="${d}">✕</button>`;
+      const dom = String(d);
+      const removeBtn = el('button', {
+        text: '✕',
+        data: { domain: dom },
+        on: {
+          click: async () => {
+            const resp = await chrome.runtime.sendMessage({ type: 'REMOVE_WHITELIST', domain: dom });
+            if (resp && Array.isArray(resp.whitelist)) renderWhitelist(resp.whitelist);
+          },
+        },
+      });
+      const li = el('li', null, [
+        el('span', { text: dom }),
+        removeBtn,
+      ]);
       whitelistDisplay.appendChild(li);
     }
-    whitelistDisplay.querySelectorAll('button').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const resp = await chrome.runtime.sendMessage({ type: 'REMOVE_WHITELIST', domain: btn.dataset.domain });
-        renderWhitelist(resp.whitelist);
-      });
-    });
   }
 
   // ——— EVENT LISTENERS ———
@@ -142,7 +186,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Toggle
   toggle.addEventListener('change', async () => {
     const resp = await chrome.runtime.sendMessage({ type: 'TOGGLE' });
-    toggle.checked = resp.enabled;
+    if (!resp) return;
+    toggle.checked = !!resp.enabled;
     document.body.classList.toggle('disabled', !resp.enabled);
   });
 
@@ -152,12 +197,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       const resp = await chrome.runtime.sendMessage({ type: 'REMOVE_WHITELIST', domain });
       whitelistBtn.textContent = 'Whitelist';
       whitelistBtn.classList.remove('active');
-      renderWhitelist(resp.whitelist);
+      if (resp && Array.isArray(resp.whitelist)) renderWhitelist(resp.whitelist);
     } else {
       const resp = await chrome.runtime.sendMessage({ type: 'ADD_WHITELIST', domain });
       whitelistBtn.textContent = 'Remove';
       whitelistBtn.classList.add('active');
-      renderWhitelist(resp.whitelist);
+      if (resp && Array.isArray(resp.whitelist)) renderWhitelist(resp.whitelist);
     }
   });
 
