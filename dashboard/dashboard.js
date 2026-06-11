@@ -65,112 +65,168 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // H-B helper — build DOM elements safely. Properties go via attribute
+  // setters and textContent so no value ever passes through HTML parsing.
+  // `props` keys: text (textContent), title, value, type, cls (className),
+  // attrs (object of additional attributes via setAttribute), style (object),
+  // data (dataset object), on (event listeners object).
+  function el(tag, props, children) {
+    const node = document.createElement(tag);
+    if (props) {
+      if (props.cls) node.className = props.cls;
+      if (props.text != null) node.textContent = String(props.text);
+      if (props.title != null) node.title = String(props.title);
+      if (props.value != null) node.value = String(props.value);
+      if (props.type != null) node.type = String(props.type);
+      if (props.attrs) for (const k in props.attrs) node.setAttribute(k, String(props.attrs[k]));
+      if (props.style) for (const k in props.style) node.style.setProperty(k, props.style[k]);
+      if (props.data) for (const k in props.data) node.dataset[k] = String(props.data[k]);
+      if (props.on) for (const k in props.on) node.addEventListener(k, props.on[k]);
+    }
+    if (children) {
+      for (const c of children) {
+        if (c == null) continue;
+        node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+      }
+    }
+    return node;
+  }
+
+  function clearChildren(node) {
+    while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
   // ——— RENDER FUNCTIONS ———
 
   function renderCategories(categories) {
     const entries = Object.entries(categories).sort((a, b) => b[1] - a[1]);
     catCount.textContent = entries.length + ' types';
 
+    clearChildren(categoryList);
+
     if (entries.length === 0) {
-      categoryList.innerHTML = '<div class="empty-state">No data yet — browse some websites to see blocked ad categories</div>';
+      categoryList.appendChild(el('div', { cls: 'empty-state', text: 'No data yet — browse some websites to see blocked ad categories' }));
       return;
     }
 
     const maxVal = entries[0][1];
-    categoryList.innerHTML = entries.map(([name, count]) => {
+    for (const [name, count] of entries) {
       const cfg = CAT_CONFIG[name] || CAT_CONFIG['Other'];
       const pct = Math.max(4, (count / maxVal) * 100);
-      return `
-        <div class="cat-row">
-          <div class="cat-icon ${cfg.cls}">${cfg.icon}</div>
-          <div class="cat-info">
-            <div class="cat-name">${name}</div>
-            <div class="cat-bar-wrap">
-              <div class="cat-bar" style="width:${pct}%;background:${cfg.color}"></div>
-            </div>
-          </div>
-          <div class="cat-count">${fmt(count)}</div>
-        </div>
-      `;
-    }).join('');
+
+      const bar = el('div', { cls: 'cat-bar', style: { width: pct + '%', background: cfg.color } });
+      const barWrap = el('div', { cls: 'cat-bar-wrap' }, [bar]);
+      const info = el('div', { cls: 'cat-info' }, [
+        el('div', { cls: 'cat-name', text: name }),
+        barWrap,
+      ]);
+      const row = el('div', { cls: 'cat-row' }, [
+        el('div', { cls: 'cat-icon ' + cfg.cls, text: cfg.icon }),
+        info,
+        el('div', { cls: 'cat-count', text: fmt(count) }),
+      ]);
+      categoryList.appendChild(row);
+    }
   }
 
   function renderDomains(topSites) {
     domainCount.textContent = topSites.length + ' domains';
+    clearChildren(domainList);
 
     if (topSites.length === 0) {
-      domainList.innerHTML = '<div class="empty-state">No blocked domains yet</div>';
+      domainList.appendChild(el('div', { cls: 'empty-state', text: 'No blocked domains yet' }));
       return;
     }
 
-    domainList.innerHTML = topSites.slice(0, 30).map(([domain, count], i) => `
-      <div class="domain-row">
-        <span class="domain-rank">${i + 1}</span>
-        <span class="domain-name" title="${domain}">${domain}</span>
-        <span class="domain-count">${fmt(count)}</span>
-      </div>
-    `).join('');
+    topSites.slice(0, 30).forEach(([domain, count], i) => {
+      const row = el('div', { cls: 'domain-row' }, [
+        el('span', { cls: 'domain-rank', text: i + 1 }),
+        el('span', { cls: 'domain-name', text: String(domain), title: String(domain) }),
+        el('span', { cls: 'domain-count', text: fmt(count) }),
+      ]);
+      domainList.appendChild(row);
+    });
   }
 
   function renderLog(entries) {
+    clearChildren(logList);
+
     if (!entries || entries.length === 0) {
-      logList.innerHTML = '<div class="empty-state">Waiting for blocked requests...<br>Browse a website to see live data</div>';
+      const empty = el('div', { cls: 'empty-state' });
+      empty.appendChild(document.createTextNode('Waiting for blocked requests...'));
+      empty.appendChild(document.createElement('br'));
+      empty.appendChild(document.createTextNode('Browse a website to see live data'));
+      logList.appendChild(empty);
       return;
     }
 
-    logList.innerHTML = entries.map(entry => {
-      const typeLabel = (entry.type || 'unknown').replace('xmlhttprequest', 'xhr').replace('sub_frame', 'iframe').replace('stylesheet', 'css');
-      return `
-        <div class="log-entry">
-          <span class="log-type ${typeLabel}">${typeLabel}</span>
-          <span class="log-url" title="${entry.url}">${truncUrl(entry.url)}</span>
-          <span class="log-time">${timeAgo(entry.timestamp)}</span>
-        </div>
-      `;
-    }).join('');
+    for (const entry of entries) {
+      const url = String(entry.url || '');
+      const typeLabel = String(entry.type || 'unknown')
+        .replace('xmlhttprequest', 'xhr')
+        .replace('sub_frame', 'iframe')
+        .replace('stylesheet', 'css')
+        .replace(/[^a-z0-9_-]/gi, ''); // strip anything weird before using as className
+
+      const row = el('div', { cls: 'log-entry' }, [
+        el('span', { cls: 'log-type ' + typeLabel, text: typeLabel }),
+        el('span', { cls: 'log-url', text: truncUrl(url), title: url }),
+        el('span', { cls: 'log-time', text: timeAgo(entry.timestamp) }),
+      ]);
+      logList.appendChild(row);
+    }
   }
 
   function renderWhitelist(list) {
     whitelistEmpty.style.display = list.length ? 'none' : 'block';
-    whitelistList.innerHTML = list.map(domain => `
-      <li class="whitelist-item">
-        <span>${domain}</span>
-        <button class="whitelist-remove" data-domain="${domain}" title="Remove">✕</button>
-      </li>
-    `).join('');
+    clearChildren(whitelistList);
 
-    // Bind remove buttons
-    whitelistList.querySelectorAll('.whitelist-remove').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const resp = await chrome.runtime.sendMessage({
-          type: 'REMOVE_WHITELIST',
-          domain: btn.dataset.domain
-        });
-        renderWhitelist(resp.whitelist);
-        statWhitelistCount.textContent = resp.whitelist.length;
+    for (const domain of list) {
+      const d = String(domain);
+      const removeBtn = el('button', {
+        cls: 'whitelist-remove',
+        text: '✕',
+        title: 'Remove',
+        data: { domain: d },
+        on: {
+          click: async () => {
+            const resp = await chrome.runtime.sendMessage({ type: 'REMOVE_WHITELIST', domain: d });
+            // Null-safety on response — service worker may have died, or
+            // backend returned an error envelope.
+            if (resp && Array.isArray(resp.whitelist)) {
+              renderWhitelist(resp.whitelist);
+              statWhitelistCount.textContent = resp.whitelist.length;
+            }
+          },
+        },
       });
-    });
+      const item = el('li', { cls: 'whitelist-item' }, [
+        el('span', { text: d }),
+        removeBtn,
+      ]);
+      whitelistList.appendChild(item);
+    }
   }
 
   // ——— FETCH & RENDER ALL DATA ———
   async function loadDashboard() {
     try {
       const data = await chrome.runtime.sendMessage({ type: 'GET_DASHBOARD_DATA' });
-      if (!data) return;
+      if (!data || data.error) return;
 
       // Toggle state
-      masterToggle.checked = data.enabled;
-      updateToggleUI(data.enabled);
+      masterToggle.checked = !!data.enabled;
+      updateToggleUI(!!data.enabled);
 
-      // Hero stats
-      statTotal.textContent = fmt(data.totalBlocked);
-      statRules.textContent = fmt(data.networkRuleCount + data.cosmeticRuleCount);
-      statSites.textContent = fmt(data.topSites.length);
-      statWhitelistCount.textContent = data.whitelist.length;
+      // Hero stats — defensive defaults for every field
+      statTotal.textContent = fmt(data.totalBlocked || 0);
+      statRules.textContent = fmt((data.networkRuleCount || 0) + (data.cosmeticRuleCount || 0));
+      statSites.textContent = fmt((data.topSites || []).length);
+      statWhitelistCount.textContent = (data.whitelist || []).length;
 
       // Since install banner
       if (data.sinceInstall && sibCount) {
-        sibCount.textContent = data.sinceInstall.totalBlocked.toLocaleString('en-US');
+        sibCount.textContent = (data.sinceInstall.totalBlocked || 0).toLocaleString('en-US');
         if (data.sinceInstall.installDate && sibDate) {
           const d = new Date(data.sinceInstall.installDate);
           const now = new Date();
@@ -180,11 +236,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      // Sections
-      renderCategories(data.categories);
-      renderDomains(data.topSites);
-      renderLog(data.blockedLog);
-      renderWhitelist(data.whitelist);
+      // Sections — pass safe defaults so renderers never crash
+      renderCategories(data.categories || {});
+      renderDomains(data.topSites || []);
+      renderLog(data.blockedLog || []);
+      renderWhitelist(data.whitelist || []);
     } catch (err) {
       console.error('[Dashboard] Failed to load:', err);
     }
@@ -209,8 +265,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Master toggle
   masterToggle.addEventListener('change', async () => {
     const resp = await chrome.runtime.sendMessage({ type: 'TOGGLE' });
-    masterToggle.checked = resp.enabled;
-    updateToggleUI(resp.enabled);
+    if (!resp) return;
+    masterToggle.checked = !!resp.enabled;
+    updateToggleUI(!!resp.enabled);
   });
 
   // Add to whitelist
@@ -223,8 +280,10 @@ document.addEventListener('DOMContentLoaded', () => {
       domain
     });
     whitelistInput.value = '';
-    renderWhitelist(resp.whitelist);
-    statWhitelistCount.textContent = resp.whitelist.length;
+    if (resp && Array.isArray(resp.whitelist)) {
+      renderWhitelist(resp.whitelist);
+      statWhitelistCount.textContent = resp.whitelist.length;
+    }
   }
 
   whitelistAddBtn.addEventListener('click', addWhitelist);
