@@ -5,7 +5,7 @@
  * Each scriptlet is a string of JS code that runs in the page context.
  * Activated via filter rules: example.com##+js(scriptlet-name, arg1, arg2)
  *
- * v2.0.3 SECURITY:
+ * v1.2 SECURITY:
  *   - buildScriptletCode() is gated by SCRIPTLET_ALLOWLIST (security.js)
  *   - args are sanitized via sanitizeScriptletArgs() before string interpolation
  *   - Filter list sanitizer strips scriptlet rules using non-allowlisted names
