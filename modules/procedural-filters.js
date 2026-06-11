@@ -20,6 +20,46 @@ export class ProceduralFilters {
   constructor() {
     this.filters = [];
     this.hiddenElements = new WeakSet();
+    // L-A — track observer + throttle timer so we can disconnect on unload
+    this._observer = null;
+    this._timer = null;
+    this._pagehideBound = null;
+  }
+
+  /**
+   * M-E — compile a regex from an untrusted filter argument, but REFUSE
+   * patterns that are prone to catastrophic backtracking (ReDoS). A
+   * procedural filter like ##div:has-text(/(a+)+$/) would otherwise hang
+   * the page on every DOM mutation. Returns a RegExp or null.
+   *
+   * Heuristics (conservative — better to skip a filter than freeze a tab):
+   *   - reject nested quantifiers:    (…+)+   (…*)*   (…+)*   (…*)+
+   *   - reject quantified groups that themselves contain a quantifier
+   *   - reject quantifier applied to a group containing alternation: (a|aa)+
+   *   - cap overall pattern length at 200 chars
+   */
+  static _safeRegex(pattern, flags = '') {
+    if (typeof pattern !== 'string') return null;
+    if (pattern.length > 200) return null;
+
+    // Nested quantifier: a quantifier immediately after a ) that closes a
+    // group whose body also contained a quantifier. We approximate with a
+    // few well-known dangerous shapes.
+    const DANGEROUS = [
+      /\([^)]*[+*][^)]*\)\s*[+*]/,   // (…+…)+  or (…*…)*  etc — quantifier inside AND after a group
+      /\([^)]*\|[^)]*\)\s*[+*]/,     // (a|b)+ style alternation under a quantifier
+      /[+*]\s*[+*]/,                 // consecutive quantifiers  a*+ / .*+
+      /\{\d{3,}\}/,                  // absurd bounded repetition {1000}
+    ];
+    for (const d of DANGEROUS) {
+      if (d.test(pattern)) return null;
+    }
+
+    try {
+      return new RegExp(pattern, flags);
+    } catch (e) {
+      return null;
+    }
   }
 
   /**
@@ -94,8 +134,15 @@ export class ProceduralFilters {
   // Check if element contains given text (string or /regex/)
   _hasText(el, arg) {
     const text = (el.textContent || '').trim();
-    if (arg.startsWith('/') && arg.endsWith('/')) {
-      try { return new RegExp(arg.slice(1, -1)).test(text); } catch (e) { return false; }
+    if (arg.startsWith('/') && arg.endsWith('/') && arg.length > 2) {
+      // M-E — compile via the ReDoS-safe path. If the pattern is rejected,
+      // degrade to a literal substring search of the inner pattern so the
+      // filter still does *something* instead of silently doing nothing.
+      const re = ProceduralFilters._safeRegex(arg.slice(1, -1));
+      if (re) {
+        try { return re.test(text); } catch (e) { return false; }
+      }
+      return text.includes(arg.slice(1, -1));
     }
     return text.includes(arg);
   }
@@ -104,11 +151,19 @@ export class ProceduralFilters {
   _upward(el, arg) {
     if (/^\d+$/.test(arg)) {
       let n = parseInt(arg, 10);
+      // sanity cap — nobody climbs 50 levels; prevents a pathological arg
+      if (n > 50) n = 50;
       let curr = el;
       while (n-- > 0 && curr) curr = curr.parentElement;
       return curr;
     }
-    return el.closest(arg);
+    // L-B — closest() throws a DOMException on a malformed selector. The
+    // arg comes from a filter list, so it may be invalid. Guard it.
+    try {
+      return el.closest(arg);
+    } catch (e) {
+      return null;
+    }
   }
 
   // Match by computed CSS — e.g. "background-image: /ads/"
@@ -119,8 +174,13 @@ export class ProceduralFilters {
     const valueArg = arg.slice(colon + 1).trim();
     let val;
     try { val = getComputedStyle(el).getPropertyValue(prop); } catch (e) { return false; }
-    if (valueArg.startsWith('/') && valueArg.endsWith('/')) {
-      try { return new RegExp(valueArg.slice(1, -1)).test(val); } catch (e) { return false; }
+    if (valueArg.startsWith('/') && valueArg.endsWith('/') && valueArg.length > 2) {
+      // M-E — ReDoS-safe compile
+      const re = ProceduralFilters._safeRegex(valueArg.slice(1, -1));
+      if (re) {
+        try { return re.test(val); } catch (e) { return false; }
+      }
+      return val.includes(valueArg.slice(1, -1));
     }
     return val.includes(valueArg);
   }
@@ -155,11 +215,36 @@ export class ProceduralFilters {
   observe(throttle = 1000) {
     if (this.filters.length === 0) return;
     this.run();
-    let timer = null;
-    const obs = new MutationObserver(() => {
-      if (timer) return;
-      timer = setTimeout(() => { timer = null; this.run(); }, throttle);
+
+    // L-A — disconnect any previous observer/timer before creating new
+    // ones. Without this, SPA route changes stack observers that each
+    // re-run every filter on every mutation — a steady memory + CPU leak.
+    this.disconnect();
+
+    this._observer = new MutationObserver(() => {
+      if (this._timer) return;
+      this._timer = setTimeout(() => { this._timer = null; this.run(); }, throttle);
     });
-    if (document.body) obs.observe(document.body, { childList: true, subtree: true });
+    if (document.body) {
+      this._observer.observe(document.body, { childList: true, subtree: true });
+    }
+
+    // L-A — tear everything down when the page goes away.
+    if (!this._pagehideBound) {
+      this._pagehideBound = () => this.disconnect();
+      window.addEventListener('pagehide', this._pagehideBound);
+    }
+  }
+
+  // L-A — explicit teardown. Safe to call multiple times.
+  disconnect() {
+    if (this._observer) {
+      try { this._observer.disconnect(); } catch (e) {}
+      this._observer = null;
+    }
+    if (this._timer) {
+      clearTimeout(this._timer);
+      this._timer = null;
+    }
   }
 }
