@@ -61,10 +61,22 @@ export function sanitizeScriptletArgs(args) {
   return args
     .slice(0, MAX_SCRIPTLET_ARGS)
     .map(a => String(a).slice(0, MAX_SCRIPTLET_ARG_LEN))
-    // Strip characters that could be used to escape string literals
-    // in the generated `"arg"` payload. The buildScriptletCode function
-    // already escapes ", but defense in depth.
-    .map(a => a.replace(/[\u2028\u2029`$]/g, ''));
+    // SI-01 (v1.1) — strip every character that could be used to break
+    // out of the generated `"arg"` string literal or the surrounding
+    // <script> context:
+    //   `  $        — template-literal / interpolation lever
+    //   \           — backslash is the escape character itself; if an arg
+    //                 can smuggle a backslash it can defeat the quote
+    //                 escaping in buildScriptletCode. No legitimate
+    //                 scriptlet arg (property names, simple values, plain
+    //                 regex sources) needs a literal backslash, so we drop
+    //                 them entirely rather than try to escape them.
+    //   \u2028/9    — JS line terminators (would break the statement)
+    //   \r \n       — newlines
+    .map(a => a.replace(/[\u2028\u2029\r\n`$\\]/g, ''))
+    // Defense in depth: never allow a </script or <script sequence through,
+    // even though injection is via element.textContent (not innerHTML).
+    .filter(a => !/<\/?script/i.test(a));
 }
 
 // ════════════════════════════════════════════════════════════════
