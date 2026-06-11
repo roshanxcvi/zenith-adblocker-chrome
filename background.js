@@ -2,7 +2,32 @@
  * Zenith AdBlocker — Chrome Background (MV3)
  * by roshanxcvi
  *
- * v1.1 — REFRESH DOUBLE-COUNT FIX
+ * v1.2— INJECTION-FOCUSED AUDIT (3 findings):
+ *   CI-01 CSS injection via cosmetic selector with braces in an attribute
+ *         value — selectors are now validated for CSS-breakout chars
+ *         ({ } @ ; </style) before being concatenated into a <style>,
+ *         and the injected stylesheet is built from the validated list
+ *         (content.js)
+ *   SI-01 Scriptlet arg sanitizer hardened — strips backslashes and line
+ *         terminators and drops args containing <script (security.js)
+ *   WAR-01 web_accessible_resources trimmed — network-logger.html/.js
+ *         removed (extension pages don't need web access); resources
+ *         split so only what's injected/redirected is exposed (manifest)
+ *
+ * v1.0 — COMPREHENSIVE HARDENING (third-round audit, 11 findings):
+ *   H-A Cookie auto-reject scoped to CMP containers + isSafeToClick guard
+ *   H-B XSS-safe DOM rendering in dashboard.js and popup.js
+ *   H-C shouldBlock honors real resourceType (typed rules now match)
+ *   M-A Whitelist/cosmetic domain match is dot-anchored, not substring
+ *   M-B TrackerLearner _isLegitimate dot-anchored suffix match
+ *   M-C TrackerLearner domainSightings capped at 500 by recency (LRU)
+ *   M-D new RegExp wrapped in try/catch — one bad rule no longer kills parse
+ *   M-E Procedural-filter regex sanitized against ReDoS (nested quantifiers)
+ *   L-A Procedural-filter MutationObserver disconnects on pagehide
+ *   L-B _upward closest() wrapped in try/catch
+ *   L-C Element picker refuses to hide structural elements (html/head/body)
+ *
+ * v1.2 — REFRESH DOUBLE-COUNT FIX
  *   Bug:  Refreshing a page added the same block count to the badge
  *         AND to the lifetime "sinceInstall" total again. Refresh 5
  *         times → counts inflated 5x.
@@ -20,10 +45,10 @@
  *         - REPORT_BLOCKED uses the same dedup keyed on (tab, host)
  *           so the three countOnce() calls are credited once
  *
- * v1.1 — SECOND-ROUND AUDIT FIXES (kept):
+ * v1.0— SECOND-ROUND AUDIT FIXES (kept):
  *   H-01..I-02  ...see CHANGELOG for the full list
  *
- * v1.1— SECURITY HARDENING (kept):
+ * v1.0 — SECURITY HARDENING (kept):
  *   #1..#6      ...filter integrity, scriptlet allowlist, sender
  *                  validation, explicit CSP, null-safe URL parsing
  */
@@ -59,7 +84,7 @@ let tabDoms = {};
 let tabUrls = {};
 let initDone = false;
 
-// v2.0.5 — refresh dedup state. See the long comment block below for why.
+// refresh dedup state. See the long comment block below for why.
 const recentBlocks = Object.create(null);    // { [tabId]: { [urlOrKey]: timestamp } }
 const DEDUP_MAX_PER_TAB = 1000;              // memory cap per tab
 
@@ -168,7 +193,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 chrome.webNavigation.onCommitted.addListener((d) => {
   if (d.frameId !== 0) return;
 
-  // v1.1 FIX — reset per-tab badge on EVERY top-frame navigation,
+  // v2.0.5 FIX — reset per-tab badge on EVERY top-frame navigation,
   // including refresh. The previous filter excluded 'reload', which
   // meant refreshing a page accumulated counts across refreshes.
   //
@@ -179,7 +204,7 @@ chrome.webNavigation.onCommitted.addListener((d) => {
   stats[d.tabId] = 0;
   tabDoms[d.tabId] = {};
 
-  // v1.1 — clear per-tab dedup state on navigation. Same URL re-blocked
+  // v2.0.5 — clear per-tab dedup state on navigation. Same URL re-blocked
   // on the same tab after this point will be credited to the lifetime
   // counter fresh, as it should be.
   recentBlocks[d.tabId] = Object.create(null);
@@ -204,7 +229,7 @@ chrome.alarms.onAlarm.addListener((a) => {
 });
 
 // ════════════════════════════════════════════════════════════════
-// v1.1— REFRESH DEDUP STATE
+// v1.0— REFRESH DEDUP STATE
 // ════════════════════════════════════════════════════════════════
 //
 // recentBlocks[tabId][url] — map of URLs blocked on this tab, cleared
@@ -250,13 +275,13 @@ try {
       const tabId = info.request.tabId;
       const url = info.request.url;
 
-      // v1.1 — per-tab badge counts every block, BUT it resets on
+      // v1.0— per-tab badge counts every block, BUT it resets on
       // navigation via webNavigation.onCommitted above. No more
       // accumulation across refreshes.
       stats[tabId] = (stats[tabId] || 0) + 1;
       updateBadge(tabId, stats[tabId]);
 
-      // v1.1 — lifetime counter (`sinceInstall.totalBlocked`)
+      // v1.0 — lifetime counter (`sinceInstall.totalBlocked`)
       // dedupes per (tab, url) since the last navigation. So:
       //   - Page A blocks 50 ads → +50 lifetime
       //   - User refreshes → +0 lifetime (same URLs re-blocked)
@@ -327,7 +352,8 @@ const HANDLERS = {
   CHECK_URL: (msg, sender, sendResponse) => {
     const url = clampStr(msg.url, 2048);
     const src = clampStr(msg.sourceUrl, 2048);
-    sendResponse({ blocked: isEnabled && engine.shouldBlock(url, src) });
+    const rt = clampStr(msg.resourceType, 32); // optional; engine handles ''
+    sendResponse({ blocked: isEnabled && engine.shouldBlock(url, src, rt) });
   },
 
   GET_COSMETIC_FILTERS: (msg, sender, sendResponse) => {
@@ -462,7 +488,7 @@ const HANDLERS = {
       if (!tabDoms[tabId][h]) tabDoms[tabId][h] = { count: 0, type: 'cosmetic' };
       tabDoms[tabId][h].count += count;
 
-      // v1.1 — only count cosmetic blocks toward LIFETIME once per
+      // v2.0.5 — only count cosmetic blocks toward LIFETIME once per
       // (tab, hostname) since the last navigation. content.js calls
       // countOnce() multiple times (at load, +500ms, +3s) so without
       // this we'd triple-count even on a single page load — and on
@@ -666,7 +692,7 @@ const HANDLERS = {
       return;
     }
     sendResponse({
-      version: '2.0.5',
+      version: '2.0.7',
       initDone,
       networkRules: engine.networkFilters.length,
       cosmeticRules: engine.cosmeticFilters.length,
@@ -819,7 +845,7 @@ async function init() {
   } catch (e) { logError('init:badge-restore', e); }
 
   initDone = true;
-  console.log(`[Zenith] v1.1 ready — network:${engine.networkFilters.length} cosmetic:${engine.cosmeticFilters.length}`);
+  console.log(`[Zenith] v1.2 ready — network:${engine.networkFilters.length} cosmetic:${engine.cosmeticFilters.length}`);
 }
 
 init();
