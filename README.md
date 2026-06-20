@@ -7,7 +7,7 @@
 **Developed by [roshanxcvi](https://github.com/roshanxcvi)**
 
 ![Version](https://img.shields.io/badge/version-1.3.0-00e676?style=for-the-badge)
-![Chrome](https://img.shields.io/badge/Chrome-MV3-4285F4?style=for-the-badge\&logo=google-chrome\&logoColor=white)
+![Chrome](https://img.shields.io/badge/Chrome-MV3-4285F4?style=for-the-badge&logo=google-chrome&logoColor=white)
 ![Privacy](https://img.shields.io/badge/privacy-local--first-00e676?style=for-the-badge)
 
 Zenith is a Chrome Manifest V3 privacy-focused ad blocker with network blocking, cosmetic filtering, tracker protection, fingerprint protection, cookie popup handling, per-site controls, and local-only settings.
@@ -22,28 +22,28 @@ Zenith AdBlocker is a Chrome MV3 extension built to block ads, trackers, cookie 
 
 The goal of Zenith is to provide a clean, privacy-first browsing experience while keeping user data local.
 
-Zenith is inspired by mature privacy tools such as uBlock Origin, Privacy Badger, Ghostery, and AdBlock Plus, but it is an independent project with its own Chrome MV3-focused architecture.
+Zenith is inspired by mature privacy tools such as uBlock Origin, AdGuard, Ghostery, Privacy Badger, and AdBlock Plus, but it is an independent project with its own Chrome MV3-focused architecture.
 
 ---
 
 ## ✨ Key Features
 
-* Network-level ad blocking with Chrome `declarativeNetRequest`
-* Cosmetic filtering for hiding ad containers and sponsored elements
-* Packaged cosmetic rules from `rules/cosmetic-rules.json`
-* Per-site controls for enabling or disabling protection features by domain
-* Tracker blocking and smart tracker learning
-* Fingerprint protection helpers
-* Cookie popup auto-reject/hide logic
-* Annoyance blocking for popups, newsletter prompts, and floating widgets
-* Crypto miner blocking
-* YouTube-specific ad handling
-* Live network logger
-* Dashboard statistics
-* Local-only settings and logs
-* No acceptable ads program
-* No remote JavaScript execution
-* No `eval()` or `new Function()`
+- Network-level ad blocking with Chrome `declarativeNetRequest`
+- Cosmetic filtering for hiding ad containers and sponsored elements
+- Packaged cosmetic rules from `rules/cosmetic-rules.json`
+- Per-site controls for enabling or disabling protection features by domain
+- Tracker blocking and smart tracker learning
+- Fingerprint protection helpers
+- Cookie popup auto-reject/hide logic
+- Annoyance blocking for popups, newsletter prompts, and floating widgets
+- Crypto miner blocking
+- YouTube-specific ad handling
+- Live network logger
+- Dashboard statistics
+- Local-only settings and logs
+- No acceptable ads program
+- No remote JavaScript execution
+- No `eval()` or `new Function()`
 
 ---
 
@@ -113,14 +113,14 @@ Zenith v1.3.0 adds per-site settings.
 
 Each website can have its own protection settings, including:
 
-* Protection enabled/disabled
-* Ads
-* Cosmetic filtering
-* Trackers
-* Fingerprinting
-* Cookie popups
-* Annoyances
-* Crypto miners
+- Protection enabled/disabled
+- Ads
+- Cosmetic filtering
+- Trackers
+- Fingerprinting
+- Cookie popups
+- Annoyances
+- Crypto miners
 
 Example:
 
@@ -142,12 +142,12 @@ Zenith includes a rule parser and DNR compiler for simple blocking rules.
 
 Supported rule types include:
 
-* Network rules
-* Allow rules
-* Cosmetic rules
-* Basic scriptlet-style rules
-* Packaged cosmetic selectors
-* Simple DNR conversion for compatible network rules
+- Network rules
+- Allow rules
+- Cosmetic rules
+- Basic scriptlet-style rules
+- Packaged cosmetic selectors
+- Simple DNR conversion for compatible network rules
 
 Example rules:
 
@@ -168,11 +168,11 @@ Zenith includes a live network logger that displays blocked requests and cosmeti
 
 The logger can show:
 
-* Blocked request type
-* Blocked URL/domain
-* Time of block
-* Request category
-* Recent blocking activity
+- Blocked request type
+- Blocked URL/domain
+- Time of block
+- Request category
+- Recent blocking activity
 
 This helps users understand what Zenith is blocking.
 
@@ -184,11 +184,11 @@ Zenith includes YouTube-specific logic that runs only on `youtube.com`.
 
 It can:
 
-* Hide YouTube ad containers
-* Close overlay ads
-* Attempt to skip skippable ads
-* Reduce ad-related interruptions
-* Keep YouTube-specific selectors scoped to avoid hiding the main header or layout
+- Hide YouTube ad containers
+- Close overlay ads
+- Attempt to skip skippable ads
+- Reduce ad-related interruptions
+- Keep YouTube-specific selectors scoped to avoid hiding the main header or layout
 
 YouTube changes frequently, so YouTube blocking may require ongoing maintenance.
 
@@ -200,20 +200,20 @@ Zenith is designed to be local-first.
 
 Zenith does not:
 
-* Sell browsing data
-* Send visited websites to a remote analytics server
-* Collect page content
-* Use remote JavaScript
-* Use remote tracking or analytics
+- Sell browsing data
+- Send visited websites to a remote analytics server
+- Collect page content
+- Use remote JavaScript
+- Use remote tracking or analytics
 
 Zenith stores settings locally using Chrome storage, including:
 
-* Enabled/disabled status
-* Whitelist domains
-* Per-site settings
-* Blocking counters
-* Local blocked request logs
-* Filter list settings
+- Enabled/disabled status
+- Whitelist domains
+- Per-site settings
+- Blocking counters
+- Local blocked request logs
+- Filter list settings
 
 Blocked request logs are stored locally and can be cleared by the user.
 
@@ -221,14 +221,14 @@ Blocked request logs are stored locally and can be cleared by the user.
 
 ## 💾 Data Storage
 
-| Data                   | Storage                                        | Purpose                        |
-| ---------------------- | ---------------------------------------------- | ------------------------------ |
-| Enabled/disabled state | `chrome.storage.local`                         | Saves protection state         |
-| Whitelist domains      | `chrome.storage.local`                         | Stores excluded websites       |
-| Per-site settings      | `chrome.storage.local`                         | Saves domain-specific controls |
-| Block counters         | `chrome.storage.local`                         | Shows blocking statistics      |
-| Since-install counter  | `chrome.storage.local` / `chrome.storage.sync` | Preserves long-term count      |
-| Blocked request logs   | `chrome.storage.local`                         | Powers the network logger      |
+| Data | Storage | Purpose |
+|---|---|---|
+| Enabled/disabled state | `chrome.storage.local` | Saves protection state |
+| Whitelist domains | `chrome.storage.local` | Stores excluded websites |
+| Per-site settings | `chrome.storage.local` | Saves domain-specific controls |
+| Block counters | `chrome.storage.local` | Shows blocking statistics |
+| Since-install counter | `chrome.storage.local` / `chrome.storage.sync` | Preserves long-term count |
+| Blocked request logs | `chrome.storage.local` | Powers the network logger |
 
 ---
 
@@ -236,22 +236,22 @@ Blocked request logs are stored locally and can be cleared by the user.
 
 Zenith uses several layers of protection:
 
-1. **Network blocking**
+1. **Network blocking**  
    Uses Chrome `declarativeNetRequest` rules to block compatible network requests before they load.
 
-2. **Dynamic rules**
+2. **Dynamic rules**  
    Converts supported filter rules into Chrome DNR rules.
 
-3. **Cosmetic filtering**
+3. **Cosmetic filtering**  
    Injects safe CSS selectors to hide ads, banners, sponsored cards, and annoying elements.
 
-4. **Content script protection**
+4. **Content script protection**  
    Runs page-level privacy and annoyance protections.
 
-5. **Scriptlet support**
+5. **Scriptlet support**  
    Uses allowlisted scriptlets for selected anti-adblock and tracker behaviors.
 
-6. **Per-site settings**
+6. **Per-site settings**  
    Applies domain-specific protection settings before enabling page-level modules.
 
 ---
@@ -281,63 +281,75 @@ Before releasing a new version, test:
 
 Zenith follows these project rules:
 
-* No remote JavaScript
-* No `eval()`
-* No `new Function()`
-* No inline scripts in extension pages
-* No unnecessary permissions
-* No remote fonts in extension pages
-* Filter lists are treated as text data, not executable code
-* Content scripts should receive only the minimum data needed
-* Sensitive dashboard data should only be available to extension pages
+- No remote JavaScript
+- No `eval()`
+- No `new Function()`
+- No inline scripts in extension pages
+- No unnecessary permissions
+- No remote fonts in extension pages
+- Filter lists are treated as text data, not executable code
+- Content scripts should receive only the minimum data needed
+- Sensitive dashboard data should only be available to extension pages
 
 ---
 
-## 📁 Project Structure
+## 🆚 Market Comparison
 
-```text
-zenith-adblocker-chrome/
-├── manifest.json
-├── background.js
-├── content.js
-├── fingerprint.js
-├── popup/
-├── dashboard/
-├── modules/
-├── rules/
-├── redirects/
-├── icons/
-├── README.md
-├── CHANGELOG.md
-├── PRIVACY.md
-├── SECURITY.md
-└── CONTRIBUTING.md
-```
+Zenith is not a full replacement for long-established blockers yet, but it is designed as a Chrome MV3 privacy-focused blocker that combines ad blocking, tracker protection, per-site controls, fingerprint protection, cookie popup handling, and local-only settings in one project.
 
----
+Mature blockers such as uBlock Origin, AdGuard, Ghostery, AdBlock Plus, Privacy Badger, and Brave Shields have years of real-world testing, large user bases, and wider filter compatibility. Zenith is a newer project focused on learning, privacy-first design, Chrome MV3 compatibility, and transparent local control.
 
-## 🆚 Comparison
+| Feature / Area | Zenith v1.3.0 | uBlock Origin | uBlock Origin Lite | AdGuard | Ghostery | AdBlock Plus | Privacy Badger | Brave Shields |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Chrome MV3 support | ✅ | ⚠️ | ✅ | ✅ | ✅ | ✅ | ✅ | Built-in |
+| Network ad blocking | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ✅ |
+| Cosmetic filtering | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ |
+| Tracker blocking | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️ | ✅ | ✅ |
+| Smart tracker learning | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
+| Fingerprint protection | ✅ | ❌ | ❌ | ⚠️ | ⚠️ | ❌ | ❌ | ✅ |
+| Cookie popup handling | ✅ | ⚠️ | ⚠️ | ✅ | ✅ | ❌ | ❌ | ⚠️ |
+| Annoyance blocking | ✅ | ✅ | ✅ | ✅ | ⚠️ | ⚠️ | ❌ | ⚠️ |
+| Crypto miner blocking | ✅ | ✅ | ✅ | ✅ | ⚠️ | ❌ | ❌ | ✅ |
+| YouTube-specific handling | ✅ | ✅ | ✅ | ✅ | ⚠️ | ⚠️ | ❌ | ⚠️ |
+| Scriptlet support | Basic | Advanced | Limited | Advanced | Limited | Limited | ❌ | Limited |
+| Redirect rules | Basic | Advanced | Limited | Advanced | Limited | ❌ | ❌ | Limited |
+| Advanced filter syntax | Partial | Advanced | Limited by MV3 | Advanced | Medium | Medium | ❌ | Medium |
+| Dynamic filtering | Planned | Advanced | Limited | Medium | ❌ | ❌ | ❌ | ❌ |
+| Per-site controls | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Live network logger | ✅ | ✅ | ❌ | ✅ | ⚠️ | ❌ | ❌ | ❌ |
+| Dashboard statistics | ✅ | Minimal | Minimal | ✅ | ✅ | ⚠️ | ❌ | Built-in browser UI |
+| Local-only settings | ✅ | ✅ | ✅ | ✅ | ⚠️ | ⚠️ | ✅ | ✅ |
+| Acceptable ads program | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
+| Beginner-friendly UI | ✅ | ⚠️ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Long-term maturity | Early project | Industry standard | Stable MV3 variant | Mature product | Mature product | Mature product | Mature privacy tool | Browser-level feature |
 
-Zenith is not a full replacement for uBlock Origin yet.
+### Summary
 
-uBlock Origin is a mature, highly optimized, widely trusted blocker with years of filter compatibility, advanced dynamic filtering, scriptlets, redirects, and logger features.
+**uBlock Origin** is still the strongest overall ad blocker for advanced filtering, filter-list compatibility, dynamic filtering, scriptlets, redirects, and long-term trust.
 
-Zenith is a newer Chrome MV3-focused project that combines ad blocking with additional privacy-focused features such as fingerprint protection, cookie popup handling, local dashboard stats, and per-site controls.
+**uBlock Origin Lite** is a lighter Chrome MV3-friendly option, but it is more limited than the full uBlock Origin experience.
 
-| Feature                       | Zenith v1.3.0 |              uBlock Origin              |
-| ----------------------------- | :-----------: | :-------------------------------------: |
-| Chrome MV3 support            |       ✅       | Limited/full support depends on version |
-| Network blocking              |       ✅       |                    ✅                    |
-| Cosmetic filtering            |       ✅       |                    ✅                    |
-| Advanced filter compatibility |    Partial    |                    ✅                    |
-| Scriptlets                    |     Basic     |                 Advanced                |
-| Redirect rules                |     Basic     |                 Advanced                |
-| Per-site controls             |       ✅       |                    ✅                    |
-| Fingerprint protection        |       ✅       |                    ❌                    |
-| Cookie popup handling         |       ✅       |                    ❌                    |
-| Live logger                   |       ✅       |                    ✅                    |
-| Local-only settings           |       ✅       |                    ✅                    |
-| Long-term maturity            | Early project |            Industry standard            |
+**AdGuard** is a mature commercial-grade blocker with strong filtering, cosmetic rules, and privacy features.
+
+**Ghostery** focuses strongly on tracker blocking and privacy visibility, with a user-friendly interface.
+
+**AdBlock Plus** is beginner-friendly and widely known, but it includes an acceptable ads program by default.
+
+**Privacy Badger** is strong for tracker learning, but it is not designed to be a full ad blocker.
+
+**Brave Shields** is built into the Brave browser and provides strong default protection without requiring an extension.
+
+**Zenith v1.3.0** is a newer Chrome MV3 project focused on combining ad blocking, tracker protection, fingerprint protection, cookie popup handling, per-site settings, local logs, and a clean dashboard in one local-first extension.
+
+### Honest Positioning
+
+Zenith should be described as:
+
+> A Chrome MV3 privacy-focused ad blocker with network blocking, cosmetic filtering, per-site controls, fingerprint protection, cookie popup handling, and local-only settings.
+
+Zenith should not yet claim to be better than uBlock Origin or AdGuard. A more professional and credible claim is:
+
+> Inspired by mature blockers like uBlock Origin, AdGuard, Ghostery, and Privacy Badger, with a focus on Chrome MV3, local-first privacy, and beginner-friendly controls.
 
 ---
 
@@ -347,26 +359,26 @@ Zenith is a newer Chrome MV3-focused project that combines ad blocking with addi
 
 #### Added
 
-* Rule category settings
-* Filter parser for network, allow, cosmetic, and scriptlet-style rules
-* DNR compiler for simple network and allow rules
-* Packaged cosmetic rules from `rules/cosmetic-rules.json`
-* Per-site settings support
-* Site-specific controls for changing protection by domain
+- Rule category settings
+- Filter parser for network, allow, cosmetic, and scriptlet-style rules
+- DNR compiler for simple network and allow rules
+- Packaged cosmetic rules from `rules/cosmetic-rules.json`
+- Per-site settings support
+- Site-specific controls for changing protection by domain
 
 #### Improved
 
-* Cosmetic rule loading in content scripts
-* Chrome MV3 compatibility
-* Dashboard and popup version consistency
-* Release readiness and cleanup
+- Cosmetic rule loading in content scripts
+- Chrome MV3 compatibility
+- Dashboard and popup version consistency
+- Release readiness and cleanup
 
 #### Security
 
-* Removed remote Google Fonts from extension pages
-* Kept extension pages compatible with strict Content Security Policy
-* Reduced unnecessary manifest permissions
-* Added safer packaged cosmetic rule loading through `web_accessible_resources`
+- Removed remote Google Fonts from extension pages
+- Kept extension pages compatible with strict Content Security Policy
+- Reduced unnecessary manifest permissions
+- Added safer packaged cosmetic rule loading through `web_accessible_resources`
 
 ---
 
@@ -374,14 +386,14 @@ Zenith is a newer Chrome MV3-focused project that combines ad blocking with addi
 
 Planned improvements:
 
-* Popup UI for per-site controls
-* Automated tests for parser, DNR compiler, and settings
-* Better filter syntax compatibility
-* More robust cosmetic exceptions
-* Improved rule update dashboard
-* Build/release script
-* Performance benchmark tools
-* More complete documentation
+- Popup UI for per-site controls
+- Automated tests for parser, DNR compiler, and settings
+- Better filter syntax compatibility
+- More robust cosmetic exceptions
+- Improved rule update dashboard
+- Build/release script
+- Performance benchmark tools
+- More complete documentation
 
 ---
 
@@ -391,12 +403,12 @@ Contributions are welcome.
 
 Please follow the project security rules:
 
-* Do not add remote JavaScript
-* Do not add `eval()`
-* Do not add `new Function()`
-* Do not add inline scripts
-* Do not add unnecessary permissions
-* Test popup, dashboard, service worker, and content scripts before submitting changes
+- Do not add remote JavaScript
+- Do not add `eval()`
+- Do not add `new Function()`
+- Do not add inline scripts
+- Do not add unnecessary permissions
+- Test popup, dashboard, service worker, and content scripts before submitting changes
 
 ---
 
