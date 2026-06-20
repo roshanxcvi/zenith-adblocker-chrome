@@ -256,24 +256,6 @@ Zenith uses several layers of protection:
 
 ---
 
-## 🧪 Testing Checklist
-
-Before releasing a new version, test:
-
-```text
-1. Extension loads with no red errors
-2. Service worker starts correctly
-3. Popup opens
-4. Dashboard opens
-5. BBC or another news site loads without cosmetic rule errors
-6. YouTube loads without breaking the header or player
-7. Per-site ads OFF disables cosmetic CSS
-8. Per-site ads ON enables cosmetic CSS
-9. Whitelist add/remove works
-10. Network logger opens
-11. No CSP errors in extension pages
-12. No temporary testing code remains
-```
 
 ---
 
