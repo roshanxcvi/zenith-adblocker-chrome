@@ -6,7 +6,7 @@
 
 **Developed by [roshanxcvi](https://github.com/roshanxcvi)**
 
-![Version](https://img.shields.io/badge/version-1.2-00e676?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.3.0-00e676?style=for-the-badge)
 ![Chrome](https://img.shields.io/badge/Chrome-Supported-4285F4?style=for-the-badge&logo=google-chrome&logoColor=white)
 
 Block ads, trackers, fingerprinting, crypto miners, cookie popups & annoyances. Zero acceptable ads. Zero compromise.
@@ -77,7 +77,7 @@ All enabled by default. No configuration needed.
 
 ---
 
-## 🔥 Advanced Features (v1.2)
+## 🔥 Advanced Features (v1.3.0)
 
 These put Zenith on par with uBlock Origin's technical capabilities:
 
@@ -125,7 +125,7 @@ All your data is stored in `chrome.storage.local` and stays safe across browser 
 
 ---
 
-## 🎨 Improved Readability (v1.2)
+## 🎨 Improved Readability (v1.3.0)
 
 The entire UI was rebuilt with accessibility in mind:
 
@@ -163,11 +163,11 @@ The entire UI was rebuilt with accessibility in mind:
 
 ## 📋 Changelog
 
-**v1.2** — Advanced features pack: Network Logger, Scriptlet Injection, Procedural Cosmetic Filters, Redirect Rules. Massive readability improvements (larger fonts, higher contrast). Wider popup (380px).
+**v1.3.0** — Advanced features pack: Network Logger, Scriptlet Injection, Procedural Cosmetic Filters, Redirect Rules. Massive readability improvements (larger fonts, higher contrast). Wider popup (380px).
 
-**v1.2** — Atomic storage operations for whitelist and since-install counter. Whitelist now survives browser restarts. YouTube-specific ad killer with auto-skip. Removed broken filter list URLs.
+**v1.3.0** — Atomic storage operations for whitelist and since-install counter. Whitelist now survives browser restarts. YouTube-specific ad killer with auto-skip. Removed broken filter list URLs.
 
-**v1.2** — sinceInstall counter with `chrome.storage.sync` cloud backup. Bulletproof data persistence. Six protection modules.
+**v1.3.0** — sinceInstall counter with `chrome.storage.sync` cloud backup. Bulletproof data persistence. Six protection modules.
 
 ---
 
@@ -175,7 +175,7 @@ The entire UI was rebuilt with accessibility in mind:
 
 Made with ❤️ by **roshanxcvi**
 
-Zenith AdBlocker v1.2 — Chrome
+Zenith AdBlocker v1.3.0 — Chrome
 
 ⭐ **Star this repo if Zenith helps you browse ad-free!**
 
