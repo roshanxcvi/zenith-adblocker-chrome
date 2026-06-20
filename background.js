@@ -53,10 +53,16 @@
  *                  validation, explicit CSP, null-safe URL parsing
  */
 
+
+import { parseFilterList } from './modules/filter-parser.js';
+import { 
+  compileNetworkRulesToDnr,
+  compileAllowRulesToDnr,} from './modules/dnr-compiler.js';
 import { FilterEngine } from './rules/filter-engine.js';
 import { TrackerLearner } from './modules/tracker-learner.js';
 import { FilterListManager } from './modules/filter-list-manager.js';
 import { SCRIPTLETS, buildScriptletCode, parseScriptletRule } from './modules/scriptlets.js';
+import { RULE_CATEGORIES, getDefaultRuleCategorySettings, normalizeRuleCategorySettings } from './rules/rule-categories.js';
 import {
   validateSender,
   safeHostname,
@@ -145,6 +151,15 @@ chrome.runtime.onInstalled.addListener((details) => {
     const seed = { totalBlocked: 0, installDate: new Date().toISOString() };
     chrome.storage.local.set({ sinceInstall: seed }).catch(e => logError('install-seed-local', e));
     chrome.storage.sync.set({ sinceInstall: seed }).catch(e => logError('install-seed-sync', e));
+    // Handle the retrieved rule category settings
+    chrome.storage.local.get('ruleCategories').then((stored) => {
+      const current = stored.ruleCategories || {};
+      const normalized = normalizeRuleCategorySettings(current);
+
+      chrome.storage.local.set({
+        ruleCategories: normalized
+      });
+    });
   }
   updateFilterLists();
 });
@@ -344,10 +359,206 @@ function clampStr(value, max = 200) {
 }
 
 // L-01 — rate-limit state for UPDATE_ALL_FILTER_LISTS
+function normalizeSiteSettings(settings = {}) {
+  return {
+    enabled: settings.enabled !== false,
+    ads: settings.ads !== false,
+    cosmetic: settings.cosmetic !== false,
+    trackers: settings.trackers !== false,
+    fingerprinting: settings.fingerprinting !== false,
+    cookie: settings.cookie !== false,
+    annoyances: settings.annoyances !== false,
+    miners: settings.miners !== false
+  };
+}
+
+function getSiteKeyFromHostname(input) {
+  try {
+    let value = String(input || '').trim().toLowerCase();
+
+    if (!value) {
+      return null;
+    }
+
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      value = new URL(value).hostname;
+    }
+
+    value = value.replace(/^www\./, '');
+
+    if (!/^(?:[a-z0-9-]+\.)+[a-z]{2,63}$/i.test(value)) {
+      return null;
+    }
+
+    return value;
+  } catch (error) {
+    return null;
+  }
+}
+
 let lastFilterUpdate = 0;
 const FILTER_UPDATE_MIN_INTERVAL = 60_000;
 
+
 const HANDLERS = {
+
+  GET_SITE_SETTINGS: async (msg, sender, sendResponse) => {
+  try {
+    const siteKey = getSiteKeyFromHostname(msg.hostname);
+
+    if (!siteKey) {
+      sendResponse({
+        success: false,
+        error: 'invalid_site',
+        received: msg.hostname
+      });
+      return;
+    }
+
+    const stored = await chrome.storage.local.get('siteSettings');
+    const allSettings = stored.siteSettings || {};
+    const settings = normalizeSiteSettings(allSettings[siteKey] || {});
+
+    sendResponse({
+      success: true,
+      hostname: siteKey,
+      settings
+    });
+  } catch (error) {
+    console.error('[Zenith] GET_SITE_SETTINGS failed:', error);
+
+    sendResponse({
+      success: false,
+      error: 'get_site_settings_failed',
+      message: error?.message || String(error)
+    });
+  }
+},
+
+
+
+
+SET_SITE_SETTINGS: async (msg, sender, sendResponse) => {
+  try {
+    const siteKey = getSiteKeyFromHostname(msg.hostname);
+
+    if (!siteKey) {
+      sendResponse({
+        success: false,
+        error: 'invalid_site',
+        received: msg.hostname
+      });
+      return;
+    }
+
+    const stored = await chrome.storage.local.get('siteSettings');
+    const allSettings = stored.siteSettings || {};
+
+    allSettings[siteKey] = normalizeSiteSettings(msg.settings || {});
+
+    await chrome.storage.local.set({
+      siteSettings: allSettings
+    });
+
+    sendResponse({
+      success: true,
+      hostname: siteKey,
+      settings: allSettings[siteKey]
+    });
+  } catch (error) {
+    console.error('[Zenith] SET_SITE_SETTINGS failed:', error);
+
+    sendResponse({
+      success: false,
+      error: 'set_site_settings_failed',
+      message: error?.message || String(error)
+    });
+  }
+},
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+  GET_RULE_CATEGORIES: async (msg, sender, sendResponse) => {
+  try {
+   
+    const stored = await chrome.storage.local.get('ruleCategories');
+
+    const settings = normalizeRuleCategorySettings(stored.ruleCategories || {});
+
+    sendResponse({
+      success: true,
+      categories: RULE_CATEGORIES,
+      settings
+    });
+  } catch (error) {
+    console.error('[Zenith] GET_RULE_CATEGORIES failed:', error);
+
+    sendResponse({
+      success: false,
+      error: 'get_rule_categories_failed',
+      message: error?.message || String(error)
+    });
+  }
+},
+//old set_rule_category handler
+  //SET_RULE_CATEGORY: async (msg, sender, sendResponse) => {
+    //const category = String(msg.category || '');
+    //const enabled = Boolean(msg.enabled);
+
+SET_RULE_CATEGORY: async (msg, sender, sendResponse) => {
+  try {
+  
+    const category = String(msg.category || '').trim();
+    const enabled = msg.enabled === true;
+
+    if (!Object.prototype.hasOwnProperty.call(RULE_CATEGORIES, category)) {
+      sendResponse({
+        success: false,
+        error: 'invalid_category',
+        received: category,
+        available: Object.keys(RULE_CATEGORIES)
+      });
+      return;
+    }
+
+    const stored = await chrome.storage.local.get('ruleCategories');
+    const settings = normalizeRuleCategorySettings(stored.ruleCategories || {});
+
+    settings[category] = enabled;
+
+    await chrome.storage.local.set({
+      ruleCategories: settings
+    });
+
+    sendResponse({
+      success: true,
+      category,
+      enabled,
+      settings
+    });
+  } catch (error) {
+    console.error('[Zenith] SET_RULE_CATEGORY failed:', error);
+
+    sendResponse({
+      success: false,
+      error: 'set_rule_category_failed',
+      message: error?.message || String(error)
+    });
+  }
+},
 
   CHECK_URL: (msg, sender, sendResponse) => {
     const url = clampStr(msg.url, 2048);
@@ -845,7 +1056,7 @@ async function init() {
   } catch (e) { logError('init:badge-restore', e); }
 
   initDone = true;
-  console.log(`[Zenith] v1.2 ready — network:${engine.networkFilters.length} cosmetic:${engine.cosmeticFilters.length}`);
+  console.log(`[Zenith] v1.3.0 ready — network:${engine.networkFilters.length} cosmetic:${engine.cosmeticFilters.length}`);
 }
 
 init();
