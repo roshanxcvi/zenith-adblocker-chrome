@@ -23,8 +23,8 @@
   --yellow: #ffd740;
   --yellow-dim: #ffd74030;
   --cyan: #84ffff;
-  --font-body: 'DM Sans', sans-serif;
-  --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+ --font-body: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+ --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --radius: 8px;
   --radius-lg: 12px;
 }
