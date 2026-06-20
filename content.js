@@ -10,6 +10,38 @@
   const hostname = window.location.hostname;
   if (!hostname) return;
 
+  function domainMatches(hostname, ruleDomain) {
+  if (!hostname || !ruleDomain) return false;
+
+  const h = String(hostname).toLowerCase().replace(/^www\./, '');
+  const r = String(ruleDomain).toLowerCase().replace(/^www\./, '');
+
+  return h === r || h.endsWith('.' + r);
+}
+
+async function loadPackagedCosmeticRules() {
+  try {
+    const url = chrome.runtime.getURL('rules/cosmetic-rules.json');
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      return { global: [], siteSpecific: {} };
+    }
+
+    const rules = await response.json();
+
+    return {
+      global: Array.isArray(rules.global) ? rules.global : [],
+      siteSpecific: rules.siteSpecific && typeof rules.siteSpecific === 'object'
+        ? rules.siteSpecific
+        : {}
+    };
+  } catch (error) {
+    console.warn('[Zenith] Failed to load packaged cosmetic rules:', error);
+    return { global: [], siteSpecific: {} };
+  }
+}
+
   function send(data) {
     return new Promise(resolve => {
       try { chrome.runtime.sendMessage(data, r => resolve(r || null)); }
@@ -21,16 +53,36 @@
   if (!state || !state.enabled) return;
   if (state.whitelist && state.whitelist.some(d => hostname.includes(d))) return;
 
+
+
+
+
+
+
+ const siteResponse = await send({
+  type: 'GET_SITE_SETTINGS',
+  hostname
+});
+
+const siteSettings = siteResponse && siteResponse.success
+  ? siteResponse.settings
+  : null;
+
+if (siteSettings && siteSettings.enabled === false) {
+  return;
+} 
+
+
   let settings = {};
   try { const d = await chrome.storage.local.get('proSettings'); settings = (d && d.proSettings) || {}; } catch (e) {}
   const F = {
-    ads: settings.adBlocking !== false,
-    fp: settings.fingerprintProtection !== false,
-    cookie: settings.cookieAutoReject !== false,
-    annoy: settings.annoyanceBlocking !== false,
-    miner: settings.minerBlocking !== false,
-    antiAb: settings.antiAdblock !== false,
-  };
+  ads: settings.adBlocking !== false && (!siteSettings || siteSettings.ads !== false),
+  fp: settings.fingerprintProtection !== false && (!siteSettings || siteSettings.fingerprinting !== false),
+  cookie: settings.cookieAutoReject !== false && (!siteSettings || siteSettings.cookie !== false),
+  annoy: settings.annoyanceBlocking !== false && (!siteSettings || siteSettings.annoyances !== false),
+  miner: settings.minerBlocking !== false && (!siteSettings || siteSettings.miners !== false),
+  antiAb: settings.antiAdblock !== false,
+};
 
   const isYouTube = hostname.includes('youtube.com');
 
@@ -73,6 +125,21 @@
       const r = await send({ type: 'GET_COSMETIC_FILTERS', hostname });
       if (r && r.selectors) selectors = r.selectors;
     } catch (e) {}
+
+
+    try {
+  const packagedRules = await loadPackagedCosmeticRules();
+
+  if (Array.isArray(packagedRules.global)) {
+    selectors.push(...packagedRules.global);
+  }
+
+  for (const [domain, domainSelectors] of Object.entries(packagedRules.siteSpecific || {})) {
+    if (domainMatches(hostname, domain) && Array.isArray(domainSelectors)) {
+      selectors.push(...domainSelectors);
+    }
+  }
+} catch (e) {}
 
     // ═══════════════════════════════════
     // PROCEDURAL COSMETIC FILTERS
