@@ -2,119 +2,118 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <div class="container">
+  <div class="app">
 
     <!-- HEADER -->
-    <header>
-      <div class="logo">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-          <path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z" fill="#00e676"/>
-          <path d="M10 15.5l-3.5-3.5 1.41-1.41L10 12.67l5.59-5.59L17 8.5l-7 7z" fill="#0d1117"/>
+    <header class="hd">
+      <div class="hd-brand">
+        <svg class="hd-mark" width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z" fill="currentColor"/>
+          <path d="M10 15.5l-3.5-3.5 1.41-1.41L10 12.67l5.59-5.59L17 8.5l-7 7z" fill="#0b0f14"/>
         </svg>
-        <span>Zenith AdBlocker
+        <span class="hd-name">Zenith</span>
       </div>
-      <label class="switch">
+      <label class="switch" title="Toggle protection">
         <input type="checkbox" id="toggle" checked>
         <span class="slider"></span>
       </label>
     </header>
 
-    <!-- STATS CARD -->
-    <div class="stats-card">
-      <div class="stats-row">
-        <div class="stat-main">
-          <div class="stats-number" id="blocked-count">0</div>
-          <div class="stats-label">Blocked on this page</div>
-        </div>
-        <div class="stat-divider"></div>
-        <div class="stat-side">
-          <div class="stat-side-val" id="domain-count">0</div>
-          <div class="stat-side-lbl">Domains</div>
-        </div>
+    <!-- STATUS + PAGE COUNT -->
+    <section class="hero">
+      <div class="hero-status">
+        <span class="status-dot"></span>
+        <span class="status-text">Protection on</span>
       </div>
-      <div class="stats-total">
-        <span id="total-blocked">0</span> total blocked across all sites
+      <div class="hero-count">
+        <span class="hero-num" id="blocked-count">0</span>
+        <span class="hero-unit">blocked here</span>
       </div>
-    </div>
+      <div class="hero-meta">
+        <span><b id="domain-count">0</b> domains</span>
+        <span class="sep"></span>
+        <span><b id="total-blocked">0</b> all-time</span>
+      </div>
+    </section>
 
-    <!-- SINCE INSTALL (like uBlock Origin) -->
-    <div class="since-install">
-      <div class="si-row">
-        <div class="si-left">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z" fill="#00e676"/><path d="M10 15.5l-3.5-3.5 1.41-1.41L10 12.67l5.59-5.59L17 8.5l-7 7z" fill="#0d1117"/></svg>
-          <span class="si-label">Ads blocked since install</span>
-        </div>
-        <span class="si-count" id="since-install-count">0</span>
+    <!-- SINCE INSTALL -->
+    <section class="lifetime">
+      <div class="lt-num" id="since-install-count">0</div>
+      <div class="lt-text">
+        <div class="lt-label">Ads &amp; trackers blocked since install</div>
+        <div class="lt-date" id="since-install-date"></div>
       </div>
-      <div class="si-date" id="since-install-date"></div>
-    </div>
+    </section>
 
-    <!-- PROTECTION BADGES -->
-    <div class="protection-grid">
-      <span class="prot-badge active" title="Ad Blocking">ADS</span>
-      <span class="prot-badge active" title="Tracker Learning">TRACK</span>
-      <span class="prot-badge active" title="Fingerprint Protection">FP</span>
-      <span class="prot-badge active" title="Cookie Auto-Reject">COOKIE</span>
-      <span class="prot-badge active" title="Annoyance Blocker">ANN</span>
-      <span class="prot-badge active" title="Miner Blocker">MINE</span>
-    </div>
-
-    <!-- BLOCKED BY CATEGORY (mini bar) -->
-    <div class="section">
-      <h3>Blocked by type</h3>
-      <div class="cat-mini" id="cat-mini">
-        <div class="cat-bar-row">
-          <span class="cat-seg ads" id="seg-ads" title="Ads"></span>
-          <span class="cat-seg trackers" id="seg-trackers" title="Trackers"></span>
-          <span class="cat-seg social" id="seg-social" title="Social"></span>
-          <span class="cat-seg other" id="seg-other" title="Other"></span>
-        </div>
-        <div class="cat-legend">
-          <span class="cat-leg-item"><i class="dot ads"></i>Ads <b id="cat-ads">0</b></span>
-          <span class="cat-leg-item"><i class="dot trackers"></i>Trackers <b id="cat-trackers">0</b></span>
-          <span class="cat-leg-item"><i class="dot social"></i>Social <b id="cat-social">0</b></span>
-          <span class="cat-leg-item"><i class="dot other"></i>Other <b id="cat-other">0</b></span>
-        </div>
+    <!-- PROTECTION MODULES -->
+    <section class="block">
+      <div class="block-head">Active protection</div>
+      <div class="mods">
+        <span class="mod" title="Ad blocking">Ads</span>
+        <span class="mod" title="Tracker learning">Trackers</span>
+        <span class="mod" title="Fingerprint protection">Fingerprint</span>
+        <span class="mod" title="Cookie auto-reject">Cookies</span>
+        <span class="mod" title="Annoyance blocker">Annoyances</span>
+        <span class="mod" title="Crypto-miner blocker">Miners</span>
       </div>
-    </div>
+    </section>
 
-    <!-- DOMAINS CONNECTED / BLOCKED -->
-    <div class="section">
-      <h3>Domains blocked <span class="h3-count" id="domains-total">0</span></h3>
-      <div class="domain-list" id="domain-list">
-        <div class="domain-empty">Browse a page to see blocked domains</div>
+    <!-- BLOCKED BY TYPE -->
+    <section class="block">
+      <div class="block-head">Blocked by type</div>
+      <div class="bar" role="img" aria-label="Breakdown of blocked requests by type">
+        <span class="bar-seg ads" id="seg-ads"></span>
+        <span class="bar-seg trackers" id="seg-trackers"></span>
+        <span class="bar-seg social" id="seg-social"></span>
+        <span class="bar-seg other" id="seg-other"></span>
       </div>
-    </div>
+      <div class="legend">
+        <span class="leg"><i class="swatch ads"></i>Ads<b id="cat-ads">0</b></span>
+        <span class="leg"><i class="swatch trackers"></i>Trackers<b id="cat-trackers">0</b></span>
+        <span class="leg"><i class="swatch social"></i>Social<b id="cat-social">0</b></span>
+        <span class="leg"><i class="swatch other"></i>Other<b id="cat-other">0</b></span>
+      </div>
+    </section>
+
+    <!-- DOMAINS -->
+    <section class="block">
+      <div class="block-head">Top blocked domains <span class="pill" id="domains-total">0</span></div>
+      <div class="domains" id="domain-list">
+        <div class="domain-empty">Browse a page to see blocked domains.</div>
+      </div>
+    </section>
 
     <!-- CURRENT SITE -->
-    <div class="section">
-      <h3>Current site</h3>
-      <div class="site-info">
-        <span id="current-domain">—</span>
-        <button id="whitelist-btn" class="btn">Whitelist</button>
+    <section class="block">
+      <div class="block-head">This site</div>
+      <div class="site">
+        <span class="site-host" id="current-domain">—</span>
+        <button id="whitelist-btn" class="btn-ghost">Allow</button>
       </div>
-    </div>
+    </section>
 
-    <!-- WHITELISTED SITES (collapsible) -->
-    <div class="section">
-      <h3 class="collapsible" id="wl-toggle">Whitelisted sites <span class="arrow">▸</span></h3>
+    <!-- WHITELIST (collapsible) -->
+    <section class="block">
+      <button class="block-head collapse" id="wl-toggle" aria-expanded="false">
+        Allowed sites <span class="arrow" aria-hidden="true">›</span>
+      </button>
       <div class="wl-content" id="wl-content" style="display:none">
         <ul id="whitelist-display" class="whitelist"></ul>
-        <p class="empty-msg" id="empty-msg">No whitelisted sites</p>
+        <p class="empty-msg" id="empty-msg">No allowed sites yet.</p>
       </div>
-    </div>
+    </section>
 
     <!-- FOOTER -->
-    <footer>
-      <button id="open-dashboard" class="btn-dashboard">Open Full Dashboard</button>
-      <small>v1.3.1 — Zenith AdBlocker by roshanxcvi</small>
-      <small class="compat">Chrome</small>
+    <footer class="ft">
+      <button id="open-dashboard" class="btn-primary">Open dashboard</button>
+      <div class="ft-meta">Zenith v1.2 · by roshanxcvi</div>
     </footer>
-  </div>
 
+  </div>
   <script src="popup.js"></script>
 </body>
 </html>
