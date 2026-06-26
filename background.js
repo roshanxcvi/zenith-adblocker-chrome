@@ -54,15 +54,11 @@
  */
 
 
-import { parseFilterList } from './modules/filter-parser.js';
-import { 
-  compileNetworkRulesToDnr,
-  compileAllowRulesToDnr,} from './modules/dnr-compiler.js';
 import { FilterEngine } from './rules/filter-engine.js';
 import { TrackerLearner } from './modules/tracker-learner.js';
 import { FilterListManager } from './modules/filter-list-manager.js';
 import { SCRIPTLETS, buildScriptletCode, parseScriptletRule } from './modules/scriptlets.js';
-import { RULE_CATEGORIES, getDefaultRuleCategorySettings, normalizeRuleCategorySettings } from './rules/rule-categories.js';
+import { RULE_CATEGORIES, normalizeRuleCategorySettings } from './rules/rule-categories.js';
 import {
   validateSender,
   safeHostname,
@@ -71,6 +67,17 @@ import {
   isScriptletAllowed,
   logError,
 } from './modules/security.js';
+
+// Chrome MV3 service-worker API alias.
+// This keeps the background script from crashing in browsers/environments
+// where the extension API is exposed through `browser` instead of `chrome`.
+const chromeApi = globalThis.chrome?.runtime ? globalThis.chrome : globalThis.browser;
+
+if (!chromeApi?.runtime?.onInstalled) {
+  throw new Error('[Zenith] Chrome extension runtime API unavailable. Load this file only through chrome://extensions as the MV3 service worker.');
+}
+
+const chrome = chromeApi;
 
 const engine = new FilterEngine();
 const trackerLearner = new TrackerLearner();
@@ -208,7 +215,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 chrome.webNavigation.onCommitted.addListener((d) => {
   if (d.frameId !== 0) return;
 
-  // v2.0.5 FIX — reset per-tab badge on EVERY top-frame navigation,
+  // v1.3.1 FIX — reset per-tab badge on EVERY top-frame navigation,
   // including refresh. The previous filter excluded 'reload', which
   // meant refreshing a page accumulated counts across refreshes.
   //
@@ -219,7 +226,7 @@ chrome.webNavigation.onCommitted.addListener((d) => {
   stats[d.tabId] = 0;
   tabDoms[d.tabId] = {};
 
-  // v2.0.5 — clear per-tab dedup state on navigation. Same URL re-blocked
+  // v1.3.1 — clear per-tab dedup state on navigation. Same URL re-blocked
   // on the same tab after this point will be credited to the lifetime
   // counter fresh, as it should be.
   recentBlocks[d.tabId] = Object.create(null);
@@ -236,7 +243,7 @@ chrome.tabs.onRemoved.addListener((id) => {
   markDirty();
 });
 
-chrome.alarms.create('autoSave', { periodInMinutes: 0.5 });
+chrome.alarms.create('autoSave', { periodInMinutes: 1 });
 chrome.alarms.create('updateFilters', { periodInMinutes: 1440 });
 chrome.alarms.onAlarm.addListener((a) => {
   if (a.name === 'autoSave') flushIfDirty();
@@ -699,7 +706,7 @@ SET_RULE_CATEGORY: async (msg, sender, sendResponse) => {
       if (!tabDoms[tabId][h]) tabDoms[tabId][h] = { count: 0, type: 'cosmetic' };
       tabDoms[tabId][h].count += count;
 
-      // v2.0.5 — only count cosmetic blocks toward LIFETIME once per
+      // v1.3.1 — only count cosmetic blocks toward LIFETIME once per
       // (tab, hostname) since the last navigation. content.js calls
       // countOnce() multiple times (at load, +500ms, +3s) so without
       // this we'd triple-count even on a single page load — and on
@@ -903,7 +910,7 @@ SET_RULE_CATEGORY: async (msg, sender, sendResponse) => {
       return;
     }
     sendResponse({
-      version: '2.0.7',
+      version: '1.3.1',
       initDone,
       networkRules: engine.networkFilters.length,
       cosmeticRules: engine.cosmeticFilters.length,
