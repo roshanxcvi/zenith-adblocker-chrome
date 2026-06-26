@@ -1,0 +1,33 @@
+{
+  "global": [
+    ".ad",
+    ".ads",
+    ".advertisement",
+    ".ad-banner",
+    ".ad-container",
+    ".sponsored",
+    ".sponsor",
+    ".promoted",
+    "[class*=\"ad-banner\"]",
+    "[class*=\"advertisement\"]",
+    "[id^=\"ad-\"]",
+    "[id*=\"-ad-\"]"
+  ],
+  "siteSpecific": {
+    "youtube.com": [
+      "ytd-display-ad-renderer",
+      "ytd-promoted-sparkles-web-renderer",
+      "ytd-ad-slot-renderer",
+      ".ytp-ad-module"
+    ],
+    "reddit.com": [
+      "[data-testid=\"post-container\"] [href*=\"/promoted\"]"
+    ],
+    "facebook.com": [
+      "[aria-label=\"Sponsored\"]"
+    ],
+    "instagram.com": [
+      "article:has(a[href*=\"/ads/\"])"
+    ]
+  }
+}
