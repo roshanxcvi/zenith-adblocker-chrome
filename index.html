@@ -1,271 +1,896 @@
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Zenith AdBlocker — The Ultimate Chrome Ad Blocker</title>
-<meta name="description" content="Block ads, trackers, fingerprinting, crypto miners & cookie popups in Chrome. Zero acceptable ads. By roshanxcvi.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<title>Zenith AdBlocker — Chrome MV3 Privacy Guard</title>
+<meta name="description" content="Zenith AdBlocker is a Chrome MV3 privacy-focused ad blocker with network blocking, cosmetic filtering, tracker protection, fingerprint protection, cookie popup handling, and local-only settings.">
+
 <style>
-:root{--bg:#050810;--bg2:#0a1120;--bg3:#0f1830;--border:#152040;--border2:#1e3060;--text:#e4ecf8;--text2:#7e94b8;--text3:#3e526e;--green:#00e676;--green2:#00c853;--gdim:rgba(0,230,118,.07);--gmid:rgba(0,230,118,.16);--red:#ff5252;--blue:#40c4ff;--purple:#a78bfa;--orange:#fb923c;--cyan:#22d3ee;--pink:#f472b6;--font:'Sora',sans-serif;--mono:'Fira Code',monospace}
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{background:var(--bg);color:var(--text);font-family:var(--font);overflow-x:hidden}
-a{color:var(--green);text-decoration:none}
-.wrap{max-width:1140px;margin:0 auto;padding:0 24px}
-.fade{opacity:0;transform:translateY(30px);transition:opacity .7s,transform .7s}.fade.v{opacity:1;transform:translateY(0)}
-section{padding:90px 0}
+:root {
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-soft: #f1f5f9;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --text-soft: #94a3b8;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-soft: #dbeafe;
+  --success: #16a34a;
+  --success-soft: #dcfce7;
+  --warning: #f59e0b;
+  --danger: #dc2626;
+  --radius: 18px;
+  --shadow: 0 20px 60px rgba(15,23,42,.08);
+  --font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
 
-/* ══ NAV ══ */
-nav{position:fixed;top:0;left:0;right:0;z-index:999;padding:12px 0;background:rgba(5,8,16,.88);backdrop-filter:blur(16px);border-bottom:1px solid rgba(21,32,64,.5)}
-nav .wrap{display:flex;justify-content:space-between;align-items:center}
-.n-logo{display:flex;align-items:center;gap:9px;font-size:17px;font-weight:700;letter-spacing:-.3px}
-.n-links{display:flex;gap:24px;align-items:center}
-.n-links a{color:var(--text2);font-size:13px;font-weight:500;transition:color .2s}.n-links a:hover{color:var(--green)}
-.n-cta{background:linear-gradient(135deg,var(--green),var(--green2));color:var(--bg)!important;font-weight:700;padding:7px 18px;border-radius:7px;font-size:12px;transition:transform .2s,box-shadow .2s}
-.n-cta:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(0,230,118,.25)}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f172a;
+    --surface: #111827;
+    --surface-soft: #1e293b;
+    --border: #334155;
+    --text: #f8fafc;
+    --text-muted: #94a3b8;
+    --text-soft: #64748b;
+    --primary: #60a5fa;
+    --primary-hover: #93c5fd;
+    --primary-soft: rgba(96,165,250,.14);
+    --success-soft: rgba(22,163,74,.16);
+    --shadow: none;
+  }
+}
 
-/* ══ HERO ══ */
-.hero{min-height:100vh;display:flex;align-items:center;padding-top:80px;position:relative;overflow:hidden}
-.hero::before{content:'';position:absolute;top:-300px;left:50%;transform:translateX(-50%);width:900px;height:900px;background:radial-gradient(circle,rgba(0,230,118,.04) 0%,transparent 65%);pointer-events:none}
-.hero::after{content:'';position:absolute;inset:0;background-image:linear-gradient(rgba(21,32,64,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(21,32,64,.08) 1px,transparent 1px);background-size:60px 60px;mask:radial-gradient(ellipse 50% 50% at 50% 40%,black 10%,transparent 70%);pointer-events:none}
-.hero-inner{display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center;position:relative;z-index:1}
-.hero-text{max-width:500px}
-.hero-badge{display:inline-flex;align-items:center;gap:6px;background:var(--gdim);border:1px solid rgba(0,230,118,.15);border-radius:20px;padding:4px 14px;font-size:11px;color:var(--green);font-weight:600;margin-bottom:20px}
-.hero-badge .dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-.hero h1{font-size:clamp(36px,5vw,52px);font-weight:800;letter-spacing:-1.5px;line-height:1.08;margin-bottom:14px}
-.hero h1 .hl{color:var(--green)}
-.hero-p{font-size:17px;color:var(--text2);line-height:1.6;margin-bottom:10px;max-width:420px}
-.hero-by{font-size:13px;color:var(--text3);margin-bottom:28px}.hero-by b{color:var(--green)}
-.hero-btn{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,var(--green),var(--green2));color:var(--bg);font-weight:700;padding:14px 30px;border-radius:11px;font-size:15px;transition:transform .2s,box-shadow .2s;cursor:pointer}
-.hero-btn:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,230,118,.25);color:var(--bg)}
-.hero-stats{display:flex;gap:32px;margin-top:36px;padding-top:24px;border-top:1px solid var(--border)}
-.hs{text-align:left}.hs-v{font-size:24px;font-weight:800;font-family:var(--mono);color:var(--green)}.hs-l{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;margin-top:2px}
-.hero-visual{display:flex;justify-content:center;align-items:center;position:relative}
-.hero-visual svg{border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.5),0 0 40px rgba(0,230,118,.06);border:1px solid var(--border)}
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
-/* ══ FEATURES ══ */
-.sec-label{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--green);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px}
-.sec-title{font-size:clamp(26px,4vw,38px);font-weight:800;letter-spacing:-.8px;margin-bottom:14px;line-height:1.12}
-.sec-desc{font-size:16px;color:var(--text2);max-width:500px;line-height:1.6}
-.feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:40px}
-.fc{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:24px 20px;position:relative;overflow:hidden;transition:border-color .3s,transform .3s}
-.fc:hover{border-color:var(--border2);transform:translateY(-3px)}
-.fc::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;opacity:0;transition:opacity .3s}.fc:hover::before{opacity:1}
-.fc:nth-child(1)::before{background:var(--red)}.fc:nth-child(2)::before{background:var(--green)}.fc:nth-child(3)::before{background:var(--blue)}
-.fc:nth-child(4)::before{background:var(--purple)}.fc:nth-child(5)::before{background:var(--orange)}.fc:nth-child(6)::before{background:var(--cyan)}
-.fc-i{font-size:24px;margin-bottom:12px}
-.fc h3{font-size:16px;font-weight:700;margin-bottom:6px}
-.fc p{font-size:13px;color:var(--text2);line-height:1.6}
+html {
+  scroll-behavior: smooth;
+}
 
-/* ══ ADVANCED FEATURES (4 cards) ══ */
-.adv-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px;margin-top:40px}
-.adv-card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:26px 24px;position:relative;overflow:hidden;transition:border-color .3s,transform .3s}
-.adv-card:hover{border-color:var(--border2);transform:translateY(-3px)}
-.adv-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;opacity:0;transition:opacity .3s}.adv-card:hover::before{opacity:1}
-.adv-card:nth-child(1)::before{background:var(--cyan)}.adv-card:nth-child(2)::before{background:var(--pink)}
-.adv-card:nth-child(3)::before{background:var(--orange)}.adv-card:nth-child(4)::before{background:var(--purple)}
-.adv-tag{display:inline-block;font-family:var(--mono);font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;background:var(--gdim);color:var(--green);letter-spacing:.5px;margin-bottom:10px;text-transform:uppercase}
-.adv-card h3{font-size:18px;font-weight:700;margin-bottom:8px}
-.adv-card p{font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:10px}
-.adv-card code{font-family:var(--mono);font-size:11px;background:var(--bg3);padding:3px 8px;border-radius:4px;color:var(--green);display:inline-block}
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  overflow-x: hidden;
+}
 
-/* ══ COMPARE ══ */
-table{width:100%;border-collapse:collapse;margin-top:36px;font-size:13px}
-th{padding:12px 14px;text-align:center;font-weight:700;background:var(--bg3);border-bottom:2px solid var(--border)}
-th:first-child{text-align:left;width:200px}
-th.z{color:var(--green)}
-td{padding:10px 14px;text-align:center;border-bottom:1px solid var(--border)}
-td:first-child{text-align:left;font-weight:500}
-tr:hover td{background:rgba(0,230,118,.02)}
-.ck{color:var(--green);font-weight:700;font-size:15px}
-.cx{color:var(--red);font-size:13px}
-.cw{color:var(--orange);font-size:13px}
-tr.new td:first-child::after{content:'NEW';font-family:var(--mono);font-size:9px;background:var(--green);color:var(--bg);padding:1px 6px;border-radius:3px;margin-left:8px;font-weight:700;letter-spacing:.5px;vertical-align:middle}
+a {
+  color: inherit;
+  text-decoration: none;
+}
 
-/* ══ HOW ══ */
-.steps{margin-top:40px;counter-reset:step}
-.st{display:flex;gap:20px;padding:20px 0;border-bottom:1px solid var(--border)}
-.st-n{width:42px;height:42px;flex-shrink:0;background:var(--gdim);border:1px solid rgba(0,230,118,.15);border-radius:10px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:16px;font-weight:700;color:var(--green)}
-.st-c h3{font-size:15px;font-weight:700;margin-bottom:3px}
-.st-c p{font-size:13px;color:var(--text2);line-height:1.5}
-.st-c code{font-family:var(--mono);font-size:11px;background:var(--bg3);padding:2px 7px;border-radius:3px;color:var(--green)}
+.wrap {
+  width: min(1120px, calc(100% - 40px));
+  margin: 0 auto;
+}
 
-/* ══ CTA ══ */
-.cta{text-align:center;position:relative;padding:100px 0}
-.cta::before{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:500px;height:500px;background:radial-gradient(circle,rgba(0,230,118,.04),transparent 70%)}
-.cta-t{font-size:clamp(28px,5vw,44px);font-weight:800;letter-spacing:-1px;margin-bottom:10px;position:relative}
-.cta-s{font-size:17px;color:var(--text2);margin-bottom:28px;position:relative}
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+}
 
-/* ══ FOOTER ══ */
-footer{padding:32px 0;border-top:1px solid var(--border);text-align:center;color:var(--text3);font-size:12px}
-.fl{display:flex;justify-content:center;gap:20px;margin-bottom:10px;flex-wrap:wrap}.fl a{color:var(--text2);font-size:12px}
+.nav-inner {
+  height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
 
-/* ══ RESPONSIVE ══ */
-@media(max-width:900px){.hero-inner{grid-template-columns:1fr;text-align:center}.hero-text{max-width:100%}.hero-p{margin:0 auto 10px}.hero-stats{justify-content:center}.hero-visual{margin-top:32px}.feat-grid,.adv-grid{grid-template-columns:1fr}table{font-size:11px}th,td{padding:7px 5px}}
-@media(max-width:480px){.hero-stats{flex-wrap:wrap;gap:16px}.n-links a:not(.n-cta){display:none}}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.brand-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.nav-links a:hover {
+  color: var(--text);
+}
+
+.nav-cta {
+  padding: 9px 15px;
+  border-radius: 999px;
+  background: var(--primary);
+  color: white !important;
+}
+
+.nav-cta:hover {
+  background: var(--primary-hover);
+}
+
+.hero {
+  padding: 94px 0 74px;
+}
+
+.hero-grid {
+  display: grid;
+  grid-template-columns: 1.05fr .95fr;
+  gap: 56px;
+  align-items: center;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--success);
+  box-shadow: 0 0 0 4px var(--success-soft);
+}
+
+.hero h1 {
+  max-width: 700px;
+  font-size: clamp(40px, 6vw, 68px);
+  line-height: 1.02;
+  letter-spacing: -0.06em;
+  margin-bottom: 18px;
+}
+
+.hero h1 span {
+  color: var(--primary);
+}
+
+.hero-text {
+  max-width: 620px;
+  color: var(--text-muted);
+  font-size: 18px;
+  margin-bottom: 28px;
+}
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 34px;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 0 18px;
+  border-radius: 13px;
+  border: 1px solid transparent;
+  font-weight: 800;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover);
+}
+
+.btn-secondary {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.btn-secondary:hover {
+  background: var(--surface-soft);
+}
+
+.hero-points {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  max-width: 620px;
+}
+
+.point {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+
+.point strong {
+  display: block;
+  font-size: 20px;
+  letter-spacing: -0.04em;
+}
+
+.point span {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.product-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 26px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.product-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.product-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+}
+
+.pill {
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--success-soft);
+  color: var(--success);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.product-body {
+  padding: 22px;
+}
+
+.big-number {
+  font-size: 48px;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: -0.06em;
+  color: var(--primary);
+}
+
+.big-label {
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.mini-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 22px;
+}
+
+.mini-card {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-soft);
+}
+
+.mini-card strong {
+  display: block;
+  font-size: 22px;
+}
+
+.mini-card span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.module-list {
+  margin-top: 22px;
+  display: grid;
+  gap: 10px;
+}
+
+.module-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 0;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.module-row span {
+  color: var(--text-muted);
+}
+
+.section {
+  padding: 82px 0;
+}
+
+.section-muted {
+  background: var(--surface-soft);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.section-head {
+  max-width: 720px;
+  margin-bottom: 34px;
+}
+
+.label {
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.section h2 {
+  font-size: clamp(30px, 4vw, 44px);
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+  margin-bottom: 12px;
+}
+
+.section-desc {
+  color: var(--text-muted);
+  font-size: 17px;
+}
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.card {
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.card-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 18px;
+  border-radius: 14px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 21px;
+}
+
+.card h3 {
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.card p {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.comparison-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 840px;
+}
+
+th,
+td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  text-align: center;
+  font-size: 14px;
+}
+
+th {
+  background: var(--surface-soft);
+  font-size: 13px;
+}
+
+td:first-child,
+th:first-child {
+  text-align: left;
+  font-weight: 700;
+}
+
+tr:last-child td {
+  border-bottom: 0;
+}
+
+.yes {
+  color: var(--success);
+  font-weight: 900;
+}
+
+.no {
+  color: var(--danger);
+  font-weight: 900;
+}
+
+.warn {
+  color: var(--warning);
+  font-weight: 900;
+}
+
+.steps {
+  display: grid;
+  gap: 14px;
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 16px;
+  align-items: start;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface);
+}
+
+.step-num {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-family: var(--mono);
+  font-weight: 900;
+}
+
+.step h3 {
+  margin-bottom: 4px;
+}
+
+.step p {
+  color: var(--text-muted);
+}
+
+code {
+  font-family: var(--mono);
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+}
+
+.footer {
+  padding: 40px 0;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 14px;
+}
+
+.footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.footer-links a {
+  font-weight: 700;
+}
+
+.fade {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity .5s ease, transform .5s ease;
+}
+
+.fade.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (max-width: 900px) {
+  .hero-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .features {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .nav-links a:not(.nav-cta) {
+    display: none;
+  }
+
+  .hero {
+    padding-top: 62px;
+  }
+
+  .hero-points,
+  .features {
+    grid-template-columns: 1fr;
+  }
+
+  .wrap {
+    width: min(100% - 28px, 1120px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
 </style>
+
 </head>
+
 <body>
+<nav class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top" aria-label="Zenith home">
+      <span class="brand-mark">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2L4 6v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V6l-8-4Z" fill="currentColor"/>
+          <path d="M10.6 14.8 7.8 12l1.2-1.2 1.6 1.6 4.4-4.5 1.2 1.2-5.6 5.7Z" fill="white"/>
+        </svg>
+      </span>
+      Zenith
+    </a>
 
-<nav><div class="wrap">
-<div class="n-logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z" fill="#00e676"/><path d="M10 15.5l-3.5-3.5 1.41-1.41L10 12.67l5.59-5.59L17 8.5l-7 7z" fill="#050810"/></svg>Zenith</div>
-<div class="n-links"><a href="#features">Features</a><a href="#advanced">Advanced</a><a href="#compare">Compare</a><a href="#install">Install</a><a href="https://github.com/roshanxcvi/zenith-adblocker-chrome" class="n-cta">GitHub</a></div>
-</div></nav>
-
-<section class="hero"><div class="wrap"><div class="hero-inner">
-<div class="hero-text">
-<div class="hero-badge"><span class="dot"></span>Chrome Extension — <v1 class="3 1">1.3.1</v1></div>
-<h1>Block Everything.<br><span class="hl">Trust Nothing.</span></h1>
-<p class="hero-p">The ultimate Chrome ad blocker. Combines the best of uBlock Origin, Ghostery, Privacy Badger & AdBlock Plus — in one extension.</p>
-<p class="hero-by">Developed by <b>roshanxcvi</b></p>
-<a href="https://github.com/roshanxcvi/zenith-adblocker-chrome" class="hero-btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.93１ 0-１．３１１．４６９-２．３８１ １．２３６-３．２２１-.１２４-.３０３-.５３５-１．５２４．１１７-３．１７６ ０ ０ １．００８-.３２２ ３．３０１ １．２３．９５７-.２６６ １．９８３-.３９９ ３．００３-.４０４ １．０２．００５ ２．０４７．１３８ ３．００６．４０４ ２．２９１-１．５５２ ３．２９７-１．２３ ３．２９７-１．２３．６５３ １．６５３．２４２ ２．８７４．１１８ ３．１７６．７７．８４ １．２３５ １．９₁₁ ₁₂₃₅₃₂₂₁₀₀₉₋₂₈₀₇₊₅₆₂₄₋₅₄₇₉₊₅₉₂₁₀₀₀₋₁₂₀₀₋₁₂
-<div class="hs"><div class="hs-v">100K+</div><div class="hs-l">Filter Rules</div></div>
-<div class="hs"><div class="hs-v">10</div><div class="hs-l">Protection Modules</div></div>
-<div class="hs"><div class="hs-v">7</div><div class="hs-l">Filter Lists</div></div>
-<div class="hs"><div class="hs-v">$0</div><div class="hs-l">Forever</div></div>
-</div></div>
-<div class="hero-visual">
-<svg width="340" height="430" viewBox="0 0 340 430" xmlns="http://www.w3.org/2000/svg">
-<rect width="340" height="430" fill="#0d1117"/>
-<rect x="0" y="0" width="340" height="3" fill="url(#g1)"/>
-<defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#00e676"/><stop offset="100%" stop-color="#00c853"/></linearGradient></defs>
-<text x="20" y="35" fill="#f0f6fc" font-family="Sora" font-size="18" font-weight="700">🛡️ Zenith</text>
-<rect x="280" y="22" width="44" height="22" rx="11" fill="#00e676"/>
-<circle cx="313" cy="33" r="8" fill="#fff"/>
-<rect x="20" y="65" width="300" height="100" rx="10" fill="#161b22" stroke="#30363d"/>
-<text x="170" y="115" fill="#00e676" font-family="Sora" font-size="38" font-weight="800" text-anchor="middle">1,247</text>
-<text x="170" y="135" fill="#c9d1d9" font-family="Sora" font-size="12" text-anchor="middle">BLOCKED THIS SESSION</text>
-<text x="170" y="155" fill="#8b949e" font-family="Fira Code" font-size="11" text-anchor="middle">Lifetime: 48,392</text>
-<g transform="translate(20,180)">
-<rect width="58" height="22" rx="4" fill="rgba(0,230,118,0.12)" stroke="rgba(0,230,118,0.4)"/>
-<text x="29" y="15" fill="#00e676" font-family="Sora" font-size="10" font-weight="700" text-anchor="middle">ADS</text>
-<rect x="62" width="78" height="22" rx="4" fill="rgba(0,230,118,0.12)" stroke="rgba(0,230,118,0.4)"/>
-<text x="101" y="15" fill="#00e676" font-family="Sora" font-size="10" font-weight="700" text-anchor="middle">TRACKERS</text>
-<rect x="144" width="62" height="22" rx="4" fill="rgba(0,230,118,0.12)" stroke="rgba(0,230,118,0.4)"/>
-<text x="175" y="15" fill="#00e676" font-family="Sora" font-size="10" font-weight="700" text-anchor="middle">COOKIES</text>
-<rect x="210" width="80" height="22" rx="4" fill="rgba(0,230,118,0.12)" stroke="rgba(0,230,118,0.4)"/>
-<text x="250" y="15" fill="#00e676" font-family="Sora" font-size="10" font-weight="700" text-anchor="middle">FINGERPRINT</text>
-</g>
-<text x="20" y="240" fill="#c9d1d9" font-family="Sora" font-size="11" font-weight="700" letter-spacing="1">TOP BLOCKED DOMAINS</text>
-<g font-family="Fira Code" font-size="11">
-<rect x="20" y="252" width="300" height="32" rx="6" fill="#161b22"/>
-<text x="30" y="272" fill="#f0f6fc">doubleclick.net</text>
-<text x="305" y="272" fill="#ff5252" text-anchor="end" font-weight="700">312</text>
-<rect x="20" y="290" width="300" height="32" rx="6" fill="#161b22"/>
-<text x="30" y="310" fill="#f0f6fc">googletagmanager.com</text>
-<text x="305" y="310" fill="#ff5252" text-anchor="end" font-weight="700">198</text>
-<rect x="20" y="328" width="300" height="32" rx="6" fill="#161b22"/>
-<text x="30" y="348" fill="#f0f6fc">facebook.com/tr</text>
-<text x="305" y="348" fill="#ff5252" text-anchor="end" font-weight="700">147</text>
-<rect x="20" y="366" width="300" height="32" rx="6" fill="#161b22"/>
-<text x="30" y="386" fill="#f0f6fc">scorecardresearch.com</text>
-<text x="305" y="386" fill="#ff5252" text-anchor="end" font-weight="700">89</text>
-</g>
-</svg>
+```
+<div class="nav-links">
+  <a href="#features">Features</a>
+  <a href="#compare">Compare</a>
+  <a href="#install">Install</a>
+  <a class="nav-cta" href="https://github.com/roshanxcvi/zenith-adblocker-chrome">GitHub</a>
 </div>
-</div></div></section>
+```
 
-<section id="features"><div class="wrap">
-<div class="fade"><div class="sec-label">Protection Modules</div>
-<div class="sec-title">Six layers of defense.<br>All enabled by default.</div>
-<p class="sec-desc">No configuration needed. Install and every module starts protecting you instantly.</p></div>
-<div class="feat-grid">
-<div class="fc fade"><div class="fc-i">🛡️</div><h3>Ad Blocking</h3><p>551+ built-in rules. 7 curated filter lists including EasyList, EasyPrivacy, Peter Lowe's, Fanboy's Annoyance. 100,000+ total rules. Chrome declarativeNetRequest for instant network-level blocking.</p></div>
-<div class="fc fade"><div class="fc-i">🔍</div><h3>Smart Tracker Learning</h3><p>Automatically detects domains that track you across 3+ websites and blocks them. Behavioral detection like Privacy Badger — no predefined list needed.</p></div>
-<div class="fc fade"><div class="fc-i">🔒</div><h3>Fingerprint Protection</h3><p>Canvas noise injection, WebGL spoofing, AudioContext randomization, Battery API blocking, Navigator normalization. Sends GPC & DNT signals automatically.</p></div>
-<div class="fc fade"><div class="fc-i">🍪</div><h3>Cookie Auto-Reject</h3><p>Auto-clicks "Reject All" on cookie consent popups. Supports 20+ CMP frameworks: OneTrust, Cookiebot, Didomi, TrustArc, Quantcast. Multi-language.</p></div>
-<div class="fc fade"><div class="fc-i">🧹</div><h3>Annoyance Blocker</h3><p>Kills newsletter popups, chat widgets (Intercom, Drift, Tidio, Tawk, Crisp), push prompts, app banners, sticky videos. All gone.</p></div>
-<div class="fc fade"><div class="fc-i">⛏️</div><h3>Crypto Miner Blocker</h3><p>Stops CoinHive, CryptoLoot, JSECoin, CoinImp and 15+ mining services from hijacking your CPU.</p></div>
-</div></div></section>
+  </div>
+</nav>
 
-<section id="advanced" style="background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border)"><div class="wrap">
-<div class="fade"><div class="sec-label"><v1 class="3 1">1.3.1</v1> · Advanced Features</div>
-<div class="sec-title">Pro-tier features.<br>Now in Zenith.</div>
-<p class="sec-desc">Four advanced capabilities that put Zenith on par with uBlock Origin's technical depth.</p></div>
-<div class="adv-grid">
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="badge">
+        <span class="badge-dot"></span>
+        Chrome MV3 Extension — v1.3.1
+      </div>
 
-<div class="adv-card fade">
-<span class="adv-tag">📡 New</span>
-<h3>Live Network Logger</h3>
-<p>Real-time dashboard showing every blocked request as it happens. Filter by type (Script, Image, XHR, Ping, Frame, Cosmetic), search by URL or domain. See exactly what Zenith is blocking — at a glance.</p>
+```
+  <h1>Cleaner browsing with <span>local-first protection.</span></h1>
+
+  <p class="hero-text">
+    Zenith is a Chrome MV3 privacy-focused ad blocker with network blocking, cosmetic filtering,
+    tracker protection, fingerprint protection, cookie popup handling, per-site controls, and local-only settings.
+  </p>
+
+  <div class="hero-actions">
+    <a class="btn btn-primary" href="https://github.com/roshanxcvi/zenith-adblocker-chrome">View on GitHub</a>
+    <a class="btn btn-secondary" href="#install">Install locally</a>
+  </div>
+
+  <div class="hero-points">
+    <div class="point">
+      <strong>MV3</strong>
+      <span>Chrome-ready</span>
+    </div>
+    <div class="point">
+      <strong>Local</strong>
+      <span>No remote analytics</span>
+    </div>
+    <div class="point">
+      <strong>v1.3.1</strong>
+      <span>Clean UI update</span>
+    </div>
+  </div>
 </div>
 
-<div class="adv-card fade">
-<span class="adv-tag">💉 New</span>
-<h3>Scriptlet Injection</h3>
-<p>Pre-built JavaScript injections that neutralize ad scripts and bypass anti-adblock detection. 10 built-in scriptlets — fake Google Analytics, fake AdSense, abort-on-property-read.</p>
-<code>example.com##+js(set-constant, ads.loaded, true)</code>
+<div class="product-card fade">
+  <div class="product-head">
+    <div class="product-title">
+      <span class="brand-mark">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2L4 6v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V6l-8-4Z" fill="currentColor"/>
+          <path d="M10.6 14.8 7.8 12l1.2-1.2 1.6 1.6 4.4-4.5 1.2 1.2-5.6 5.7Z" fill="white"/>
+        </svg>
+      </span>
+      Zenith Dashboard
+    </div>
+    <span class="pill">Active</span>
+  </div>
+
+  <div class="product-body">
+    <div class="big-number">1,247</div>
+    <div class="big-label">Requests blocked in this sample session</div>
+
+    <div class="mini-grid">
+      <div class="mini-card">
+        <strong>7</strong>
+        <span>Filter lists</span>
+      </div>
+      <div class="mini-card">
+        <strong>6</strong>
+        <span>Protection modules</span>
+      </div>
+    </div>
+
+    <div class="module-list">
+      <div class="module-row"><strong>Ads</strong><span>Enabled</span></div>
+      <div class="module-row"><strong>Trackers</strong><span>Enabled</span></div>
+      <div class="module-row"><strong>Fingerprinting</strong><span>Enabled</span></div>
+      <div class="module-row"><strong>Cookie popups</strong><span>Enabled</span></div>
+    </div>
+  </div>
 </div>
+```
 
-<div class="adv-card fade">
-<span class="adv-tag">🎯 New</span>
-<h3>Procedural Cosmetic Filters</h3>
-<p>Advanced selectors that pure CSS can't do. Hide elements by their text, computed style, or by climbing the DOM tree. Catch sponsored content on Twitter, LinkedIn, Reddit.</p>
-<code>twitter.com##article:has-text(Promoted)</code>
+  </div>
+</header>
+
+<section class="section section-muted" id="features">
+  <div class="wrap">
+    <div class="section-head fade">
+      <div class="label">Protection modules</div>
+      <h2>Simple controls. Strong privacy layers.</h2>
+      <p class="section-desc">
+        Zenith combines network blocking, cosmetic filtering, privacy helpers, and per-site controls in one Chrome MV3 extension.
+      </p>
+    </div>
+
+```
+<div class="features">
+  <article class="card fade">
+    <div class="card-icon">🚫</div>
+    <h3>Ad blocking</h3>
+    <p>Blocks compatible ad requests with Chrome declarativeNetRequest and hides ad containers using cosmetic filtering.</p>
+  </article>
+
+  <article class="card fade">
+    <div class="card-icon">🔍</div>
+    <h3>Tracker protection</h3>
+    <p>Blocks known trackers and includes smart tracker learning for repeated third-party tracking behavior.</p>
+  </article>
+
+  <article class="card fade">
+    <div class="card-icon">🔒</div>
+    <h3>Fingerprint protection</h3>
+    <p>Reduces selected browser fingerprinting signals such as canvas, WebGL, audio, navigator data, and privacy signals.</p>
+  </article>
+
+  <article class="card fade">
+    <div class="card-icon">🍪</div>
+    <h3>Cookie popup handling</h3>
+    <p>Rejects or hides supported cookie consent banners and common consent management popups.</p>
+  </article>
+
+  <article class="card fade">
+    <div class="card-icon">🧹</div>
+    <h3>Annoyance blocking</h3>
+    <p>Hides newsletter prompts, app banners, chat widgets, overlays, floating videos, and similar interruptions.</p>
+  </article>
+
+  <article class="card fade">
+    <div class="card-icon">📡</div>
+    <h3>Network Logger</h3>
+    <p>Shows blocked requests in a clean live logger with filtering, request type labels, and local-only logs.</p>
+  </article>
 </div>
+```
 
-<div class="adv-card fade">
-<span class="adv-tag">↪️ New</span>
-<h3>Redirect Rules</h3>
-<p>Instead of just blocking trackers, redirect them to neutered local copies. Google Analytics, Google Publisher Tag, and Facebook Pixel get fake working versions — so sites don't break. No tracking, no breakage.</p>
+  </div>
+</section>
+
+<section class="section" id="compare">
+  <div class="wrap">
+    <div class="section-head fade">
+      <div class="label">Market comparison</div>
+      <h2>Built for Chrome MV3 and local-first control.</h2>
+      <p class="section-desc">
+        Zenith is a newer project. Mature blockers such as uBlock Origin and AdGuard still have deeper filter compatibility and long-term trust.
+      </p>
+    </div>
+
+```
+<div class="comparison-wrap fade">
+  <table>
+    <thead>
+      <tr>
+        <th>Feature / Area</th>
+        <th>Zenith v1.3.1</th>
+        <th>uBlock Origin</th>
+        <th>AdGuard</th>
+        <th>Ghostery</th>
+        <th>Privacy Badger</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Chrome MV3 support</td><td class="yes">✓</td><td class="warn">Limited</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+      <tr><td>Network ad blocking</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="warn">Partial</td></tr>
+      <tr><td>Cosmetic filtering</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✕</td></tr>
+      <tr><td>Tracker blocking</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+      <tr><td>Smart tracker learning</td><td class="yes">✓</td><td class="no">✕</td><td class="no">✕</td><td class="no">✕</td><td class="yes">✓</td></tr>
+      <tr><td>Fingerprint protection</td><td class="yes">✓</td><td class="no">✕</td><td class="warn">Partial</td><td class="warn">Partial</td><td class="no">✕</td></tr>
+      <tr><td>Cookie popup handling</td><td class="yes">✓</td><td class="warn">Filter-based</td><td class="yes">✓</td><td class="yes">✓</td><td class="no">✕</td></tr>
+      <tr><td>Scriptlets</td><td class="warn">Basic</td><td class="yes">Advanced</td><td class="yes">Advanced</td><td class="warn">Limited</td><td class="no">✕</td></tr>
+      <tr><td>Redirect rules</td><td class="warn">Basic</td><td class="yes">Advanced</td><td class="yes">Advanced</td><td class="warn">Limited</td><td class="no">✕</td></tr>
+      <tr><td>Live logger</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="warn">Partial</td><td class="no">✕</td></tr>
+      <tr><td>Local-first settings</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="warn">Partial</td><td class="yes">✓</td></tr>
+      <tr><td>Long-term maturity</td><td class="warn">Early</td><td class="yes">Industry standard</td><td class="yes">Mature</td><td class="yes">Mature</td><td class="yes">Mature</td></tr>
+    </tbody>
+  </table>
 </div>
+```
 
-</div></div></section>
+  </div>
+</section>
 
-<section id="compare"><div class="wrap">
-<div class="fade"><div class="sec-label">Comparison</div>
-<div class="sec-title">One extension to replace them all.</div>
-<p class="sec-desc">See how Zenith compares to every major ad blocker.</p></div>
-<table class="fade">
-<thead><tr><th>Feature</th><th class="z">Zenith</th><th>uBlock Origin</th><th>AdBlock Plus</th><th>Ghostery</th><th>Privacy Badger</th></tr></thead>
-<tbody>
-<tr><td>Ad Blocking</td><td class="ck">✓</td><td class="ck">✓</td><td class="cw">⚠</td><td class="ck">✓</td><td class="cx">✗</td></tr>
-<tr><td>Tracker Blocking</td><td class="ck">✓</td><td class="ck">✓</td><td class="cw">⚠</td><td class="ck">✓</td><td class="ck">✓</td></tr>
-<tr><td>Auto-Learning Trackers</td><td class="ck">✓</td><td class="cx">✗</td><td class="cx">✗</td><td class="cx">✗</td><td class="ck">✓</td></tr>
-<tr><td>Fingerprint Protection</td><td class="ck">✓</td><td class="cx">✗</td><td class="cx">✗</td><td class="cx">✗</td><td class="cx">✗</td></tr>
-<tr><td>Cookie Auto-Reject</td><td class="ck">✓</td><td class="cx">✗</td><td class="cx">✗</td><td class="ck">✓</td><td class="cx">✗</td></tr>
-<tr><td>Annoyance Blocking</td><td class="ck">✓</td><td class="ck">✓</td><td class="cx">✗</td><td class="cx">✗</td><td class="cx">✗</td></tr>
-<tr><td>Crypto Miner Blocking</td><td class="ck">✓</td><td class="ck">✓</td><td class="cx">✗</td><td class="cx">✗</td><td class="cx">✗</td></tr>
-<tr><td>YouTube Ad Killer</td><td class="ck">✓</td><td class="ck">✓</td><td class="cx">✗</td><td class="cx">✗</td><td class="cx">✗</td></tr>
-<tr class="new"><td>Scriptlet Injection</td><td class="ck">✓</td><td class="ck">✓</td><td class="cx">✗</td><td class="cx">✗</td><td class="cx">✗</td></tr>
-<tr class="new"><td>Procedural Filters</td><td class="ck">✓</td><td class="ck">✓</td><td class="cx">✗</td><td class="cx">✗</td><td class="cx">✗</td></tr>
-<tr class="new"><td>Redirect Rules</td><td class="ck">✓</td><td class="ck">✓</td><td class="cx">✗</td><td class="cx">✗</td><td class="cx">✗</td></tr>
-<tr class="new"><td>Live Network Logger</td><td class="ck">✓</td><td class="cw">⚠</td><td class="cx">✗</td><td class="cx">✗</td><td class="cx">✗</td></tr>
-<tr><td>Dashboard Analytics</td><td class="ck">✓</td><td class="cx">✗</td><td class="cx">✗</td><td class="cw">⚠</td><td class="cx">✗</td></tr>
-<tr><td>Since Install Counter</td><td class="ck">✓</td><td class="ck">✓</td><td class="cx">✗</td><td class="cx">✗</td><td class="cx">✗</td></tr>
-<tr><td>Zero "Acceptable Ads"</td><td class="ck">✓</td><td class="ck">✓</td><td class="cx">✗</td><td class="ck">✓</td><td>—</td></tr>
-</tbody></table>
-</div></section>
+<section class="section section-muted" id="install">
+  <div class="wrap">
+    <div class="section-head fade">
+      <div class="label">Install</div>
+      <h2>Load Zenith locally in Chrome.</h2>
+      <p class="section-desc">Zenith can be tested as an unpacked Chrome extension during development.</p>
+    </div>
 
-<section id="install"><div class="wrap">
-<div class="fade"><div class="sec-label">Install</div>
-<div class="sec-title">Up and running in 60 seconds.</div>
-<p class="sec-desc">No coding required. Just 4 clicks.</p></div>
+```
 <div class="steps">
-<div class="st fade"><div class="st-n">1</div><div class="st-c"><h3>Clone or download the repo</h3><p>Go to the <a href="https://github.com/roshanxcvi/zenith-adblocker-chrome">GitHub repo</a> and click <b>Code → Download ZIP</b>, or clone with <code>git clone</code></p></div></div>
-<div class="st fade"><div class="st-n">2</div><div class="st-c"><h3>Unzip the file</h3><p>Right-click the ZIP → <b>Extract All</b> (Windows) or double-click (Mac).</p></div></div>
-<div class="st fade"><div class="st-n">3</div><div class="st-c"><h3>Open Chrome extensions</h3><p>Go to <code>chrome://extensions/</code> and turn on <b>Developer mode</b> (top-right toggle).</p></div></div>
-<div class="st fade"><div class="st-n">4</div><div class="st-c"><h3>Load the extension</h3><p>Click <b>"Load unpacked"</b> → select the unzipped folder. The green Zenith shield appears in your toolbar — you're protected!</p></div></div>
-</div></div></section>
+  <div class="step fade">
+    <div class="step-num">1</div>
+    <div>
+      <h3>Download or clone the project</h3>
+      <p>Download the ZIP from GitHub or clone the repository using <code>git clone</code>.</p>
+    </div>
+  </div>
 
-<section class="cta"><div class="wrap fade">
-<svg width="52" height="52" viewBox="0 0 24 24" fill="none" style="margin-bottom:16px;filter:drop-shadow(0 0 20px rgba(0,230,118,.2));animation:float 3s ease-in-out infinite"><path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z" fill="#00e676"/><path d="M10 15.5l-3.5-3.5 1.41-1.41L10 12.67l5.59-5.59L17 8.5l-7 7z" fill="#050810"/></svg>
-<style>@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}</style>
-<div class="cta-t">Take back your browser.</div>
-<div class="cta-s">Zero ads. Zero trackers. Zero compromise. Forever free.</div>
-<a href="https://github.com/roshanxcvi/zenith-adblocker-chrome" class="hero-btn" style="font-size:17px;padding:15px 36px"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>View on GitHub</a>
-</div></section>
+  <div class="step fade">
+    <div class="step-num">2</div>
+    <div>
+      <h3>Open Chrome extensions</h3>
+      <p>Go to <code>chrome://extensions/</code> and enable <strong>Developer mode</strong>.</p>
+    </div>
+  </div>
 
-<footer><div class="wrap">
-<div class="fl"><a href="https://github.com/roshanxcvi/zenith-adblocker-chrome">GitHub</a><a href="https://github.com/roshanxcvi/zenith-adblocker-chrome">Report Bug</a><a href="https://github.com/roshanxcvi">roshanxcvi</a></div>
-<p>Made with ❤️ by <a href="https://github.com/roshanxcvi">roshanxcvi</a> · Zenith AdBlocker v1.3.1</p>
-</div></footer>
+  <div class="step fade">
+    <div class="step-num">3</div>
+    <div>
+      <h3>Load unpacked</h3>
+      <p>Click <strong>Load unpacked</strong> and select the Zenith project folder.</p>
+    </div>
+  </div>
+
+  <div class="step fade">
+    <div class="step-num">4</div>
+    <div>
+      <h3>Test the extension</h3>
+      <p>Open the popup, dashboard, and Network Logger. Confirm there are no Chrome extension errors.</p>
+    </div>
+  </div>
+</div>
+```
+
+  </div>
+</section>
+
+<section class="section">
+  <div class="wrap">
+    <div class="section-head fade">
+      <div class="label">Privacy first</div>
+      <h2>No remote analytics. No acceptable ads program.</h2>
+      <p class="section-desc">
+        Zenith stores settings and local logs on the user’s device. Filter lists are treated as text data, not executable code.
+      </p>
+    </div>
+
+```
+<div class="features">
+  <article class="card fade">
+    <div class="card-icon">🔐</div>
+    <h3>Local settings</h3>
+    <p>Whitelist domains, per-site controls, counters, and logs are stored locally using Chrome storage.</p>
+  </article>
+
+  <article class="card fade">
+    <div class="card-icon">🧱</div>
+    <h3>CSP-safe UI</h3>
+    <p>Extension pages avoid remote fonts, remote scripts, eval, and unnecessary external dependencies.</p>
+  </article>
+
+  <article class="card fade">
+    <div class="card-icon">🚫</div>
+    <h3>No acceptable ads</h3>
+    <p>Zenith does not include a paid acceptable ads program or advertising whitelist.</p>
+  </article>
+</div>
+```
+
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="wrap">
+    <div class="footer-links">
+      <a href="https://github.com/roshanxcvi/zenith-adblocker-chrome">GitHub</a>
+      <a href="https://github.com/roshanxcvi/zenith-adblocker-chrome/issues">Report issue</a>
+      <a href="https://github.com/roshanxcvi">roshanxcvi</a>
+    </div>
+    <p>Made with ❤️ by roshanxcvi · Zenith AdBlocker v1.3.1 — Chrome MV3</p>
+  </div>
+</footer>
 
 <script>
-const o=new IntersectionObserver(e=>{e.forEach(x=>{if(x.isIntersecting)x.target.classList.add('v')})},{threshold:.1,rootMargin:'0px 0px -40px 0px'});
-document.querySelectorAll('.fade').forEach(e=>o.observe(e));
+const observer = new IntersectionObserver((entries) => {
+  for (const entry of entries) {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  }
+}, {
+  threshold: 0.08,
+  rootMargin: '0px 0px -30px 0px'
+});
+
+document.querySelectorAll('.fade').forEach((element) => {
+  observer.observe(element);
+});
 </script>
-</body></html>
+
+</body>
+</html>
