@@ -117,7 +117,13 @@
 
       const typeCol = document.createElement('span');
       typeCol.className = 'col-type type-' + type.replace(/[^a-z0-9_-]/gi, '');
-      typeCol.textContent = type.slice(0, 5);
+      const TYPE_LABELS = {
+        xmlhttprequest: 'XHR', sub_frame: 'FRAME', main_frame: 'DOC',
+        stylesheet: 'CSS', script: 'JS', image: 'IMG', font: 'FONT',
+        media: 'MEDIA', ping: 'PING', websocket: 'WS', cosmetic: 'COSM',
+        other: 'OTHER',
+      };
+      typeCol.textContent = TYPE_LABELS[type] || type.slice(0, 5).toUpperCase();
       row.appendChild(typeCol);
 
       const urlCol = document.createElement('span');
