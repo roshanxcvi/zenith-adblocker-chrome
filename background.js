@@ -1056,7 +1056,7 @@ async function init() {
   } catch (e) { logError('init:badge-restore', e); }
 
   initDone = true;
-  console.log(`[Zenith] v1.3.0 ready — network:${engine.networkFilters.length} cosmetic:${engine.cosmeticFilters.length}`);
+  console.log(`[Zenith] v1.3.1 ready — network:${engine.networkFilters.length} cosmetic:${engine.cosmeticFilters.length}`);
 }
 
 init();
