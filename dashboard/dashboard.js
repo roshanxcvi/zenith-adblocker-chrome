@@ -22,6 +22,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const resetBtn = document.getElementById('reset-btn');
   const sibCount = document.getElementById('sib-count');
   const sibDate = document.getElementById('sib-date');
+  const filterListContainer = document.getElementById('filter-list-list');
+  const filterListCount = document.getElementById('filter-list-count');
 
   // Category config
   const CAT_CONFIG = {
@@ -54,16 +56,44 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Truncate URL for display
-  function truncUrl(url, max = 80) {
-    try {
-      const u = new URL(url);
-      let display = u.hostname + u.pathname;
-      if (u.search) display += u.search.slice(0, 20);
-      return display.length > max ? display.slice(0, max) + '...' : display;
-    } catch {
-      return url.length > max ? url.slice(0, max) + '...' : url;
-    }
+function formatLogUrl(url, max = 90) {
+  const raw = String(url || '');
+
+  if (!raw) {
+    return {
+      full: '',
+      display: 'unknown',
+      domain: 'unknown',
+    };
   }
+
+  try {
+    const u = new URL(raw);
+    let display = u.hostname + u.pathname;
+
+    if (u.search) {
+      display += u.search.slice(0, 24);
+    }
+
+    if (display.length > max) {
+      display = display.slice(0, max) + '...';
+    }
+
+    return {
+      full: raw,
+      display,
+      domain: u.hostname,
+    };
+  } catch {
+    const display = raw.length > max ? raw.slice(0, max) + '...' : raw;
+
+    return {
+      full: raw,
+      display,
+      domain: display,
+    };
+  }
+}
 
   // H-B helper — build DOM elements safely. Properties go via attribute
   // setters and textContent so no value ever passes through HTML parsing.
@@ -148,32 +178,122 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function renderLog(entries) {
-    clearChildren(logList);
+  
 
-    if (!entries || entries.length === 0) {
-      const empty = el('div', { cls: 'empty-state' });
-      empty.appendChild(document.createTextNode('Waiting for blocked requests...'));
-      empty.appendChild(document.createElement('br'));
-      empty.appendChild(document.createTextNode('Browse a website to see live data'));
-      logList.appendChild(empty);
+function renderLog(entries) {
+  clearChildren(logList);
+
+  const safeEntries = Array.isArray(entries) ? entries : [];
+
+  if (safeEntries.length === 0) {
+    const empty = el('div', { cls: 'empty-state' });
+    empty.appendChild(document.createTextNode('Waiting for blocked requests...'));
+    empty.appendChild(document.createElement('br'));
+    empty.appendChild(document.createTextNode('Browse a website to see live data'));
+    logList.appendChild(empty);
+    return;
+  }
+
+  for (const entry of safeEntries) {
+    const url = String(entry.url || entry.domain || '');
+
+    const typeLabel = String(entry.type || 'other')
+      .toLowerCase()
+      .replace('xmlhttprequest', 'xhr')
+      .replace('sub_frame', 'iframe')
+      .replace('stylesheet', 'css')
+      .replace(/[^a-z0-9_-]/gi, '') || 'other';
+
+    const row = el('div', { cls: 'log-entry' }, [
+      el('span', { cls: 'log-type ' + typeLabel, text: typeLabel }),
+
+      el('span', {
+        cls: 'log-url',
+        title: url,
+        attrs: {
+          'aria-label': url,
+        },
+      }, [
+        el('span', {
+          cls: 'domain',
+          text: formatLogUrl(url).display,
+        }),
+      ]),
+
+      el('span', { cls: 'log-time', text: timeAgo(entry.timestamp) }),
+    ]);
+
+    logList.appendChild(row);
+  }
+}
+
+
+  function renderFilterLists(lists) {
+    if (!filterListContainer) return;
+
+    const safeLists = Array.isArray(lists) ? lists : [];
+    const enabledCount = safeLists.filter((list) => list && list.enabled).length;
+    if (filterListCount) filterListCount.textContent = enabledCount + ' enabled';
+
+    clearChildren(filterListContainer);
+
+    if (safeLists.length === 0) {
+      filterListContainer.appendChild(el('div', { cls: 'empty-state', text: 'No filter lists available' }));
       return;
     }
 
-    for (const entry of entries) {
-      const url = String(entry.url || '');
-      const typeLabel = String(entry.type || 'unknown')
-        .replace('xmlhttprequest', 'xhr')
-        .replace('sub_frame', 'iframe')
-        .replace('stylesheet', 'css')
-        .replace(/[^a-z0-9_-]/gi, ''); // strip anything weird before using as className
+    for (const list of safeLists) {
+      const id = String(list.id || '');
+      const checkbox = el('input', {
+        type: 'checkbox',
+        attrs: { 'aria-label': 'Toggle ' + String(list.name || id) },
+        on: {
+          change: async (event) => {
+            const enabled = event.target.checked;
+            event.target.disabled = true;
+            const response = await chrome.runtime.sendMessage({
+              type: 'SET_FILTER_LIST_ENABLED',
+              id,
+              enabled
+            });
+            event.target.disabled = false;
 
-      const row = el('div', { cls: 'log-entry' }, [
-        el('span', { cls: 'log-type ' + typeLabel, text: typeLabel }),
-        el('span', { cls: 'log-url', text: truncUrl(url), title: url }),
-        el('span', { cls: 'log-time', text: timeAgo(entry.timestamp) }),
+            if (!response || response.success !== true) {
+              event.target.checked = !enabled;
+              alert('Could not update this filter list. Check the service worker console.');
+              return;
+            }
+
+            renderFilterLists(response.lists || []);
+            loadDashboard();
+          }
+        }
+      });
+      checkbox.checked = list.enabled !== false;
+
+      const toggle = el('label', { cls: 'filter-toggle' }, [
+        checkbox,
+        el('span', { cls: 'filter-toggle-slider' })
       ]);
-      logList.appendChild(row);
+
+      const meta = [];
+      meta.push(el('span', { text: (list.ruleCount || 0).toLocaleString('en-US') + ' rules' }));
+      if (list.lastUpdated) meta.push(el('span', { text: 'Updated ' + timeAgo(list.lastUpdated) }));
+      if (list.source) meta.push(el('span', { text: String(list.source) }));
+
+      const item = el('div', { cls: 'filter-list-item' }, [
+        el('div', { cls: 'filter-list-main' }, [
+          el('div', { cls: 'filter-list-top' }, [
+            el('span', { cls: 'filter-list-name', text: String(list.name || id) }),
+            el('span', { cls: 'filter-list-category', text: String(list.category || 'list') })
+          ]),
+          el('div', { cls: 'filter-list-desc', text: String(list.description || '') }),
+          el('div', { cls: 'filter-list-meta' }, meta)
+        ]),
+        toggle
+      ]);
+
+      filterListContainer.appendChild(item);
     }
   }
 
@@ -241,6 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
       renderDomains(data.topSites || []);
       renderLog(data.blockedLog || []);
       renderWhitelist(data.whitelist || []);
+      renderFilterLists(data.filterLists || []);
     } catch (err) {
       console.error('[Dashboard] Failed to load:', err);
     }
@@ -308,3 +429,4 @@ document.addEventListener('DOMContentLoaded', () => {
   // Initial load
   loadDashboard();
 });
+
