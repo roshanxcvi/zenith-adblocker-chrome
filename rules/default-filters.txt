@@ -1,5 +1,5 @@
 ! Zenith AdBlocker — Master Default Filter List
-! Last updated: 2025-03-18
+! Last updated: 2026-7-1
 ! Total rules: 500+
 
 ! ═══════════════════════════════════════════════════
@@ -875,3 +875,34 @@
 
 ||notify.bugsnag.com^
 ||browser.sentry-cdn.com^
+
+
+
+||analyticsengine.s3.amazonaws.com^
+||analytics.s3.amazonaws.com^
+||claritybt.freshmarketer.com^
+||freshmarketer.com^
+||fwtracks.freshmarketer.com^
+||upload.luckyorange.net^
+||settings.luckyorange.net^
+||cs.luckyorange.net^
+||stats.wp.com^
+||sessions.bugsnag.com^
+||api.bugsnag.com^
+||app.bugsnag.com^
+||app.getsentry.com^
+||log.fc.yahoo.com^
+||udc.yahoo.com^
+||analytics.query.yahoo.com^
+||geo.yahoo.com^
+||udcm.yahoo.com^
+||partnerads.ysm.yahoo.com^
+||analytics.yahoo.com^
+||adtech.yahooinc.com^
+||iadsdk.apple.com^
+
+||adtago.s3.amazonaws.com^
+||advice-ads.s3.amazonaws.com^
+||analytics.pinterest.com^
+||ads.pinterest.com^
+||ads.youtube.com^
