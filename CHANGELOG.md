@@ -59,3 +59,17 @@
 ### Notes
 
 * This update focuses mainly on UI polish, Chrome Web Store readiness, and CSP-safe extension pages.
+
+* ## v1.3.2-filter-lists
+
+### Added
+- Added optional dashboard toggles for OISD Big, Disconnect Tracking Protection, GoodbyeAds, and HaGeZi Pro mini.
+- Added short user-facing descriptions for each filter list so users understand what each list blocks.
+- Added filter list rule counts, update time, source labels, and enabled/disabled status in the dashboard.
+
+### Improved
+- Added trusted origins and CSP connect permissions for the new remote filter lists.
+- Added conversion support for simple hosts/domain blocklists into AdBlock-style `||domain^` rules before parsing.
+
+### Notes
+- Extra lists are disabled by default because aggressive DNS/domain lists may break some websites. Users can enable them from the dashboard.
