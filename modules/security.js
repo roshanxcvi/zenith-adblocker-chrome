@@ -97,6 +97,9 @@ export const TRUSTED_FILTER_ORIGINS = Object.freeze(new Set([
   'secure.fanboy.co.nz',
   'malware-filter.gitlab.io',
   'easylist-downloads.adblockplus.org',
+  'big.oisd.nl',
+  's3.amazonaws.com',
+  'raw.githubusercontent.com',
 ]));
 
 export function isTrustedFilterUrl(url) {
