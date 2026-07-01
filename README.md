@@ -6,7 +6,7 @@
 
 **Developed by [roshanxcvi](https://github.com/roshanxcvi)**
 
-![Version](https://img.shields.io/badge/version-1.3.1-00e676?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.3.2-00e676?style=for-the-badge)
 ![Chrome](https://img.shields.io/badge/Chrome-MV3-4285F4?style=for-the-badge\&logo=google-chrome\&logoColor=white)
 ![Privacy](https://img.shields.io/badge/privacy-local--first-00e676?style=for-the-badge)
 
@@ -72,6 +72,7 @@ chrome://extensions/ → Developer mode → Load unpacked
 * YouTube-specific ad handling
 * Live Network Logger
 * Clean dashboard analytics
+* Recent Blocked Requests with hover URL expansion
 * Local-only settings and logs
 * No acceptable ads program
 * No remote JavaScript execution
@@ -177,7 +178,7 @@ The logger can show:
 * Recent blocking activity
 * Search and type filtering
 
-The v1.3.1 logger UI was redesigned with cleaner spacing, system fonts, better readability, and CSP-safe local styling.
+The v1.3.2 logger and dashboard UI include cleaner spacing, system fonts, better blocked-request visibility, hover URL expansion, and CSP-safe local styling.
 
 ---
 
@@ -199,12 +200,13 @@ YouTube changes frequently, so YouTube blocking may require ongoing maintenance.
 
 ## 🎨 Clean UI Update
 
-Zenith v1.3.1 includes a cleaner and more professional user interface.
+Zenith v1.3.2 includes a cleaner, more professional, and more stable user interface.
 
 Updated UI areas:
 
 * Popup interface
 * Dashboard interface
+* Recent Blocked Requests panel
 * Network Logger interface
 * Version labels
 * Typography
@@ -239,6 +241,8 @@ Zenith stores settings locally using Chrome storage, including:
 
 Blocked request logs are stored locally and can be cleared by the user.
 
+Content scripts receive only the minimum data needed. For whitelist checks, content scripts receive current-site whitelist status instead of the full whitelist list.
+
 ---
 
 ## 💾 Data Storage
@@ -251,6 +255,7 @@ Blocked request logs are stored locally and can be cleared by the user.
 | Block counters         | `chrome.storage.local`                         | Shows blocking statistics      |
 | Since-install counter  | `chrome.storage.local` / `chrome.storage.sync` | Preserves long-term count      |
 | Blocked request logs   | `chrome.storage.local`                         | Powers the Network Logger      |
+| Filter list settings   | `chrome.storage.local`                         | Saves enabled/disabled lists   |
 
 ---
 
@@ -276,6 +281,9 @@ Zenith uses several layers of protection:
 6. **Per-site settings**
    Applies domain-specific protection settings before enabling page-level modules.
 
+7. **Filter list controls**
+   Allows selected filter lists to be enabled or disabled from the dashboard.
+
 ---
 
 ## 🆚 Market Comparison
@@ -284,7 +292,7 @@ Zenith is not a full replacement for long-established blockers yet, but it is de
 
 Mature blockers such as uBlock Origin, AdGuard, Ghostery, AdBlock Plus, Privacy Badger, and Brave Shields have years of real-world testing, large user bases, and wider filter compatibility. Zenith is a newer project focused on learning, privacy-first design, Chrome MV3 compatibility, and transparent local control.
 
-| Feature / Area            | Zenith v1.3.1 |   uBlock Origin   | uBlock Origin Lite |     AdGuard    |    Ghostery    |  AdBlock Plus  |    Privacy Badger   |     Brave Shields     |
+| Feature / Area            | Zenith v1.3.2 |   uBlock Origin   | uBlock Origin Lite |     AdGuard    |    Ghostery    |  AdBlock Plus  |    Privacy Badger   |     Brave Shields     |
 | ------------------------- | :-----------: | :---------------: | :----------------: | :------------: | :------------: | :------------: | :-----------------: | :-------------------: |
 | Chrome MV3 support        |       ✅       |         ⚠️        |          ✅         |        ✅       |        ✅       |        ✅       |          ✅          |        Built-in       |
 | Network ad blocking       |       ✅       |         ✅         |          ✅         |        ✅       |        ✅       |        ✅       |          ⚠️         |           ✅           |
@@ -325,9 +333,11 @@ Before releasing a new version, test:
 8. Per-site ads OFF disables cosmetic CSS
 9. Per-site ads ON enables cosmetic CSS
 10. Whitelist add/remove works
-11. No CSP errors in extension pages
-12. No remote Google Fonts errors
-13. No temporary testing code remains
+11. Recent Blocked Requests shows URLs correctly
+12. Recent Blocked Requests hover tooltip works
+13. No CSP errors in extension pages
+14. No remote Google Fonts errors
+15. No temporary testing code remains
 ```
 
 ---
@@ -349,6 +359,27 @@ Zenith follows these project rules:
 ---
 
 ## 📋 Changelog
+
+### v1.3.2
+
+#### Fixed
+
+* Fixed dashboard Recent Blocked Requests URL display.
+* Added hover expansion and tooltip support for blocked request URLs.
+* Fixed dashboard `truncUrl is not defined` issue.
+* Fixed dashboard `url is not defined` issue.
+* Fixed `GET_STATE` privacy handling so content scripts receive only current-site whitelist status instead of the full whitelist.
+
+#### Improved
+
+* Improved dashboard log row layout for cleaner URL visibility.
+* Improved content-script privacy boundary by avoiding full whitelist exposure.
+* Improved dashboard stability after repeated reloads.
+* Updated project version from 1.3.1 to 1.3.2.
+
+#### Notes
+
+* This is a stability, privacy, and dashboard polish update.
 
 ### v1.3.1
 
@@ -442,7 +473,7 @@ See the `LICENSE` file for details.
 
 Made with ❤️ by **roshanxcvi**
 
-**Zenith AdBlocker v1.3.1 — Chrome MV3**
+**Zenith AdBlocker v1.3.2 — Chrome MV3**
 
 ⭐ Star the project if Zenith helps you browse with fewer ads and trackers.
 
