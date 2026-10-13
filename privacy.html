@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zenith AdBlocker — Privacy Policy</title>
+  <style>
+    :root{--bg:#0b0f14;--surface:#11171f;--line:#1a2230;--text:#e6edf6;--text-2:#9aa7b8;--text-3:#5f6b7c;--accent:#2bd576}
+    *{margin:0;box-sizing:border-box}
+    body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+      font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+    .wrap{max-width:760px;margin:0 auto;padding:48px 24px 80px}
+    .brand{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+    .brand svg{display:block}
+    h1{font-size:26px;font-weight:800;letter-spacing:-.4px}
+    .sub{color:var(--text-3);font-size:13px;margin-bottom:28px}
+    h2{font-size:16px;font-weight:700;color:var(--text);margin:28px 0 8px}
+    p{color:var(--text-2);margin:0 0 12px}
+    ul{color:var(--text-2);margin:0 0 12px 20px}
+    li{margin:4px 0}
+    b{color:var(--text)}
+    a{color:var(--accent)}
+    .foot{margin-top:40px;padding-top:20px;border-top:1px solid var(--line);color:var(--text-3);font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M11.91,19.56 L10.96,13.69 L8.32,15.64 L10.23,13.01 L10.17,12.9 L4.46,12.0 L10.23,11.06 L10.23,10.97 L8.29,8.32 L10.9,10.3 L11.0,10.27 L11.93,4.42 L12.86,10.27 L12.91,10.32 L15.55,8.41 L13.56,11.06 L19.51,12.0 L13.61,12.96 L15.83,15.77 L15.84,15.88 L12.87,13.65 L11.99,19.1 L11.99,19.5 L11.91,19.56 Z" fill="#2bd576"/>
+      </svg>
+      <h1>Privacy Policy</h1>
+    </div>
+    <div class="sub">Zenith AdBlocker · applies to version 1.3.3</div>
+
+    <p>Zenith AdBlocker processes blocking rules locally on your device.</p>
+    <p><b>Zenith does not sell browsing data. Zenith does not collect page content. Zenith does not send the websites you visit to any remote server. Zenith has no analytics, no telemetry, and no remote logging.</b></p>
+
+    <h2>What is stored, and where</h2>
+    <p>Zenith stores extension settings locally (<code>chrome.storage</code>), including:</p>
+    <ul>
+      <li>enabled/disabled status</li>
+      <li>whitelist (allowed) domains</li>
+      <li>per-site settings</li>
+      <li>blocking counters</li>
+      <li>local blocked-request logs</li>
+      <li>filter list settings</li>
+    </ul>
+    <p>The "blocked since install" counter is also mirrored to <code>chrome.storage.sync</code> so it survives a reinstall and follows your Chrome profile; it contains only a number and an install date, never URLs. Everything else stays in local storage.</p>
+    <p>Storage is restricted to trusted contexts, so only the extension's own pages and service worker can read it — not the content scripts that run on web pages.</p>
+    <p>Blocked-request logs are stored locally only and can be cleared at any time from the dashboard.</p>
+
+    <h2>Blocked activity &amp; stats</h2>
+    <p>The <b>Blocked activity</b> page, the dashboard and the popup show how many requests were blocked, the top blocked domains, and a live list of recent blocks. To produce these, Zenith observes which requests its own rules blocked, using Chrome's <code>webRequest</code> API in observe-only mode — it watches for requests that failed with a "blocked by client" result. Zenith does not use this to read request contents, modify or intercept requests, or send anything anywhere. Every count and list is built and kept on your device, and can be cleared any time from the dashboard.</p>
+
+    <h2>Data sent off the device</h2>
+    <p>The only outbound network requests Zenith makes are downloads of text-based filter lists from a fixed allowlist of trusted sources (EasyList, EasyPrivacy, Peter Lowe's list, and the optional lists you enable). These are fetched over HTTPS with no credentials and are treated as data, not executable code. No information about you or the pages you visit is included in these requests.</p>
+
+    <h2>Privacy signals</h2>
+    <p>When fingerprint protection is on, Zenith reports the Do Not Track and Global Privacy Control signals to pages. These are standard opt-out signals and are intentionally the same for every user.</p>
+
+    <h2>Permissions</h2>
+    <p>Zenith requests only the permissions it needs to block content and show per-tab status. This includes <code>webRequest</code>, used in observe-only mode to count the requests Zenith blocks for the on-device stats — it never modifies or intercepts requests, and never reads their contents. Zenith does not request access to your bookmarks, history API, downloads, or native messaging.</p>
+
+    <div class="foot">Zenith AdBlocker — by roshanxcvi &amp; Viraj Prajapati.<br>Questions, privacy requests or security reports: <a href="mailto:zenithadblocker@gmail.com">zenithadblocker@gmail.com</a>, or the project's GitHub repository.</div>
+  </div>
+</body>
+</html>
