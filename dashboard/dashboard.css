@@ -387,6 +387,10 @@ color:#0b0f14;
 background:var(--ads);
 }
 
+.cat-icon.meta{
+background:var(--social);
+}
+
 .cat-icon.rtb{
 background:var(--trackers);
 }
@@ -537,7 +541,9 @@ cursor:pointer;
 transition:background .15s ease;
 }
 
-.btn-add:hover
+.btn-add:hover{
+background:#34e082;
+}
 
 .whitelist-list{
 list-style:none;
