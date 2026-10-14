@@ -1,168 +1,117 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Zenith · Network Logger</title>
-<style>
-:root{
-  --bg:#0b0f14; --surface:#11171f; --surface-2:#161d27;
-  --line:#1f2937; --line-soft:#1a2230;
-  --text:#e6edf6; --text-2:#9aa7b8; --text-3:#5f6b7c;
-  --accent:#2bd576; --accent-dim:#1c9a55; --accent-bg:rgba(43,213,118,.10);
-  --block:#ff6b6b;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-}
-*{margin:0;padding:0;box-sizing:border-box;}
-body{
-  background:var(--bg); color:var(--text); min-height:100vh;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  -webkit-font-smoothing:antialiased;
-}
-.tnum{font-variant-numeric:tabular-nums;}
-
-/* header */
-.hd{
-  display:flex; align-items:center; gap:14px;
-  padding:16px 28px; border-bottom:1px solid var(--line-soft);
-  position:sticky; top:0; background:rgba(11,15,20,.92);
-  backdrop-filter:blur(8px); z-index:20;
-}
-.hd-mark{color:var(--accent);}
-.hd-title{font-size:16px;font-weight:700;letter-spacing:-0.3px;}
-.hd-title span{color:var(--text-3);font-weight:500;}
-.live{
-  display:inline-flex; align-items:center; gap:7px; margin-left:4px;
-  font-size:11px; font-weight:600; letter-spacing:.6px; color:var(--accent);
-  text-transform:uppercase;
-}
-.live .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);
-  box-shadow:0 0 0 3px var(--accent-bg); animation:pulse 1.8s infinite;}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
-.hd-spacer{margin-left:auto; font-size:12px; color:var(--text-3);}
-
-/* toolbar */
-.toolbar{
-  display:flex; gap:8px; align-items:center; flex-wrap:wrap;
-  padding:14px 28px; border-bottom:1px solid var(--line-soft);
-}
-.search{
-  flex:1; min-width:220px; font-family:var(--mono); font-size:12.5px;
-  background:var(--surface); color:var(--text);
-  border:1px solid var(--line); border-radius:8px; padding:9px 13px;
-}
-.search::placeholder{color:var(--text-3);}
-.search:focus{outline:none;border-color:var(--accent-dim);}
-.filters{display:flex;gap:5px;flex-wrap:wrap;}
-.filter-btn{
-  font-family:inherit; font-size:12px; font-weight:600; color:var(--text-2);
-  background:var(--surface); border:1px solid var(--line-soft);
-  border-radius:7px; padding:7px 13px; cursor:pointer; transition:all .15s ease;
-}
-.filter-btn:hover{border-color:var(--line);color:var(--text);}
-.filter-btn.active{
-  color:var(--accent); border-color:var(--accent-dim); background:var(--accent-bg);
-}
-.action-btn{
-  font-family:inherit; font-size:12px; font-weight:600; color:var(--text-2);
-  background:transparent; border:1px solid var(--line-soft);
-  border-radius:7px; padding:7px 13px; cursor:pointer; transition:all .15s ease;
-}
-.action-btn:hover{color:var(--block);border-color:var(--block);}
-
-/* stats */
-.stats{
-  display:flex; gap:28px; padding:11px 28px;
-  border-bottom:1px solid var(--line-soft); font-size:12px; color:var(--text-2);
-}
-.stat b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums;margin-left:4px;}
-
-/* table */
-.log{padding:6px 16px 28px;}
-.log-row{
-  display:grid; grid-template-columns:74px 76px 1fr 150px 64px; gap:14px;
-  padding:9px 12px; align-items:center; border-radius:7px;
-  border-bottom:1px solid var(--line-soft);
-}
-.log-row:hover{background:var(--surface);}
-.col-time{font-family:var(--mono);font-size:11.5px;color:var(--text-3);}
-.col-type{
-  font-family:var(--mono); font-size:10px; font-weight:600;
-  text-transform:uppercase; letter-spacing:.4px;
-  padding:3px 0; border-radius:5px; text-align:center;
-}
-.type-script{background:rgba(255,107,107,.14);color:#ff8585;}
-.type-image{background:rgba(77,171,247,.14);color:#74bcff;}
-.type-xmlhttprequest{background:rgba(255,180,84,.14);color:#ffc06b;}
-.type-ping{background:rgba(255,215,64,.14);color:#ffe083;}
-.type-sub_frame{background:rgba(177,136,255,.14);color:#c4a6ff;}
-.type-main_frame{background:var(--accent-bg);color:var(--accent);}
-.type-stylesheet{background:rgba(105,240,174,.14);color:#7ff0bb;}
-.type-font{background:rgba(255,128,171,.14);color:#ff99bd;}
-.type-media{background:rgba(132,255,255,.12);color:#9af;}
-.type-other{background:var(--surface-2);color:var(--text-2);}
-.type-cosmetic{background:rgba(206,147,216,.14);color:#dbaee2;}
-.col-url{
-  font-family:var(--mono); font-size:12px; color:var(--text-2);
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-}
-.col-url .domain{color:var(--text);font-weight:500;}
-.col-domain{font-family:var(--mono);font-size:11.5px;color:var(--text-3);text-align:right;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.col-action{text-align:center;}
-.act-block{
-  font-family:var(--mono); font-size:10px; font-weight:600; letter-spacing:.5px;
-  color:var(--block); background:rgba(255,107,107,.10);
-  border-radius:5px; padding:3px 0; display:block;
-}
-
-/* empty */
-.empty{padding:90px 28px;text-align:center;}
-.empty h2{font-size:15px;font-weight:600;color:var(--text-2);margin-bottom:8px;}
-.empty p{font-size:13px;color:var(--text-3);max-width:380px;margin:0 auto;}
-
-@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zenith AdBlocker — Blocked activity</title>
+  <style>
+    :root{
+      --bg:#0b0f14; --surface:#11171f; --surface-2:#161d27; --line:#1f2937; --line-soft:#1a2230;
+      --text:#e6edf6; --text-2:#9aa7b8; --text-3:#5f6b7c; --accent:#2bd576; --accent-dim:#1c9a55;
+      --accent-bg:rgba(43,213,118,.10); --danger:#ff6b6b;
+      --mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;
+    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+    .header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+      padding:16px 24px;border-bottom:1px solid var(--line-soft);position:sticky;top:0;z-index:5;
+      background:rgba(11,15,20,.92);backdrop-filter:blur(10px)}
+    .brand{display:flex;align-items:center;gap:10px}
+    .brand h1{font-size:16px;font-weight:700;letter-spacing:-.2px}
+    .live{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:600;letter-spacing:.5px;
+      text-transform:uppercase;color:var(--accent)}
+    .live-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-bg);animation:pulse 1.8s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+    .stats{display:flex;gap:20px;flex-wrap:wrap}
+    .stat{display:flex;flex-direction:column}
+    .stat b{font-size:18px;font-weight:700;font-variant-numeric:tabular-nums}
+    .stat span{font-size:11px;color:var(--text-3);text-transform:uppercase;letter-spacing:.4px}
+    .toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 24px;border-bottom:1px solid var(--line-soft)}
+    #search{flex:1;min-width:200px;font-family:var(--mono);font-size:13px;color:var(--text);
+      background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:9px 13px}
+    #search::placeholder{color:var(--text-3)}
+    #search:focus{outline:none;border-color:var(--accent-dim)}
+    .filters{display:flex;gap:6px;flex-wrap:wrap}
+    .filter-btn{font-family:inherit;font-size:12px;font-weight:600;color:var(--text-2);
+      background:var(--surface);border:1px solid var(--line-soft);border-radius:999px;padding:6px 12px;cursor:pointer;transition:all .15s ease}
+    .filter-btn:hover{color:var(--text);border-color:var(--line)}
+    .filter-btn.active{color:var(--accent);border-color:var(--accent-dim);background:var(--accent-bg)}
+    #clear-btn{font-family:inherit;font-size:12px;font-weight:600;color:var(--danger);
+      background:transparent;border:1px solid rgba(255,107,107,.3);border-radius:9px;padding:7px 14px;cursor:pointer;transition:all .15s ease}
+    #clear-btn:hover{background:rgba(255,107,107,.1);border-color:var(--danger)}
+    .log-head,.log-row{display:grid;grid-template-columns:80px 64px minmax(0,1fr) 200px 70px;gap:12px;align-items:center}
+    .log-head{padding:10px 24px;font-size:10.5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;
+      color:var(--text-3);border-bottom:1px solid var(--line-soft);position:sticky;top:0}
+    #log-container{padding-bottom:40px}
+    .log-row{padding:9px 24px;border-bottom:1px solid var(--line-soft)}
+    .log-row:hover{background:var(--surface-2)}
+    .col-time{font-family:var(--mono);font-size:11px;color:var(--text-3);white-space:nowrap}
+    .col-type{font-family:var(--mono);font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.3px;
+      text-align:center;padding:3px 0;border-radius:5px;background:var(--surface-2);color:var(--text-2)}
+    .col-type.type-script{background:rgba(255,107,107,.14);color:#ff8585}
+    .col-type.type-image{background:rgba(77,171,247,.14);color:#74bcff}
+    .col-type.type-xmlhttprequest{background:rgba(255,180,84,.14);color:#ffc06b}
+    .col-type.type-sub_frame{background:rgba(177,136,255,.14);color:#c4a6ff}
+    .col-type.type-cosmetic{background:rgba(206,147,216,.14);color:#dbaee2}
+    .col-url{font-family:var(--mono);font-size:12px;color:var(--text-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .col-url .domain{color:var(--text);font-weight:500}
+    .col-domain{font-family:var(--mono);font-size:11.5px;color:var(--text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .col-action{font-size:10px;font-weight:700;text-align:center;letter-spacing:.4px}
+    .col-action.act-block{color:var(--danger)}
+    .empty{padding:56px 24px;text-align:center}
+    .empty h2{font-size:15px;font-weight:600;color:var(--text-2);margin-bottom:6px}
+    .empty p{font-size:13px;color:var(--text-3)}
+    .privacy-note{display:flex;align-items:center;gap:7px;padding:9px 24px;font-size:11.5px;color:var(--text-3);
+      border-bottom:1px solid var(--line-soft);background:var(--surface)}
+    .privacy-note svg{flex-shrink:0;color:var(--accent-dim)}
+    @media (max-width:720px){
+      .log-head,.log-row{grid-template-columns:64px 56px minmax(0,1fr) 60px}
+      .col-domain{display:none}
+    }
+  </style>
 </head>
 <body>
+  <header class="header">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M11.91,19.56 L10.96,13.69 L8.32,15.64 L10.23,13.01 L10.17,12.9 L4.46,12.0 L10.23,11.06 L10.23,10.97 L8.29,8.32 L10.9,10.3 L11.0,10.27 L11.93,4.42 L12.86,10.27 L12.91,10.32 L15.55,8.41 L13.56,11.06 L19.51,12.0 L13.61,12.96 L15.83,15.77 L15.84,15.88 L12.87,13.65 L11.99,19.1 L11.99,19.5 L11.91,19.56 Z" fill="#2bd576"/>
+      </svg>
+      <h1>Blocked activity</h1>
+      <span class="live"><span class="live-dot"></span>Live</span>
+    </div>
+    <div class="stats">
+      <div class="stat"><b id="stat-total">0</b><span>Logged</span></div>
+      <div class="stat"><b id="stat-showing">0</b><span>Showing</span></div>
+      <div class="stat"><b id="stat-domains">0</b><span>Domains</span></div>
+      <div class="stat"><b id="stat-update">—</b><span>Updated</span></div>
+    </div>
+  </header>
 
-<div class="hd">
-  <svg class="hd-mark" width="22" height="22" viewBox="0 0 24 24" fill="none">
-    <path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z" fill="currentColor"/>
-    <path d="M10 15.5l-3.5-3.5 1.41-1.41L10 12.67l5.59-5.59L17 8.5l-7 7z" fill="#0b0f14"/>
-  </svg>
-  <div class="hd-title">Zenith <span>Network Logger</span></div>
-  <span class="live"><span class="dot"></span>Live</span>
-  <span class="hd-spacer">Refreshes every second</span>
-</div>
-
-<div class="toolbar">
-  <input type="text" class="search" id="search" placeholder="Filter by URL or domain…" />
-  <div class="filters">
-    <button class="filter-btn active" data-type="all">All</button>
-    <button class="filter-btn" data-type="script">Script</button>
-    <button class="filter-btn" data-type="image">Image</button>
-    <button class="filter-btn" data-type="xmlhttprequest">XHR</button>
-    <button class="filter-btn" data-type="ping">Ping</button>
-    <button class="filter-btn" data-type="sub_frame">Frame</button>
-    <button class="filter-btn" data-type="cosmetic">Cosmetic</button>
+  <div class="toolbar">
+    <input type="text" id="search" placeholder="Filter by URL or domain…" spellcheck="false">
+    <div class="filters">
+      <button class="filter-btn active" data-type="all">All</button>
+      <button class="filter-btn" data-type="script">Script</button>
+      <button class="filter-btn" data-type="image">Image</button>
+      <button class="filter-btn" data-type="xmlhttprequest">XHR</button>
+      <button class="filter-btn" data-type="sub_frame">Frame</button>
+      <button class="filter-btn" data-type="ping">Ping</button>
+      <button class="filter-btn" data-type="cosmetic">Cosmetic</button>
+      <button class="filter-btn" data-type="other">Other</button>
+    </div>
+    <button id="clear-btn">Clear log</button>
   </div>
-  <button class="action-btn" id="clear-btn">Clear log</button>
-</div>
 
-<div class="stats">
-  <span class="stat">Total<b id="stat-total">0</b></span>
-  <span class="stat">Showing<b id="stat-showing">0</b></span>
-  <span class="stat">Domains<b id="stat-domains">0</b></span>
-  <span class="stat">Updated<b id="stat-update">—</b></span>
-</div>
-
-<div class="log" id="log-container">
-  <div class="empty">
-    <h2>Waiting for blocked requests</h2>
-    <p>Browse the web in another tab. Every ad and tracker Zenith blocks will appear here in real time.</p>
+  <div class="privacy-note">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L3 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-5z"/></svg>
+    All blocked-activity data is counted and shown on your device only — nothing is uploaded anywhere.
   </div>
-</div>
 
-<script src="network-logger.js"></script>
+  <div class="log-head">
+    <span>Time</span><span>Type</span><span>URL</span><span>Domain</span><span>Action</span>
+  </div>
+  <div id="log-container"></div>
+
+  <script src="network-logger.js"></script>
 </body>
 </html>
