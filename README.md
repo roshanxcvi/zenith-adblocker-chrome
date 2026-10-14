@@ -4,9 +4,9 @@
 
 ### A Chrome MV3 Ad Blocker & Privacy Guard
 
-**Developed by [roshanxcvi](https://github.com/roshanxcvi)**
+**Developed by [roshanxcvi](https://github.com/roshanxcvi)** · **Support:** zenithadblocker@gmail.com
 
-![Version](https://img.shields.io/badge/version-1.3.2-00e676?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-1.3.3-00e676?style=for-the-badge)
 ![Chrome](https://img.shields.io/badge/Chrome-MV3-4285F4?style=for-the-badge\&logo=google-chrome\&logoColor=white)
 ![Privacy](https://img.shields.io/badge/privacy-local--first-00e676?style=for-the-badge)
 
@@ -70,7 +70,7 @@ chrome://extensions/ → Developer mode → Load unpacked
 * Annoyance blocking for popups, newsletter prompts, floating widgets, and overlays
 * Crypto miner blocking
 * YouTube-specific ad handling
-* Live Network Logger
+* Live "Blocked activity" view (works in the published build)
 * Clean dashboard analytics
 * Recent Blocked Requests with hover URL expansion
 * Local-only settings and logs
@@ -94,7 +94,7 @@ Zenith blocks known tracker domains and includes smart tracker learning to detec
 
 ### 🔒 Fingerprint Protection
 
-Zenith includes protections for selected fingerprinting surfaces such as canvas, WebGL, audio, navigator properties, and privacy signals.
+Zenith includes protections for selected fingerprinting surfaces: canvas readback, WebGL vendor/renderer (Windows profiles), and navigator properties (hardware concurrency, device memory), plus privacy signals (Do Not Track and Global Privacy Control). Spoofing runs in the top frame's main world; same-origin iframes and Web Workers are not covered yet.
 
 ### 🍪 Cookie Popup Handling
 
@@ -165,9 +165,9 @@ Zenith does not yet support the full advanced filter syntax supported by mature 
 
 ---
 
-## 📡 Live Network Logger
+## 📡 Blocked activity (live)
 
-Zenith includes a live Network Logger that displays blocked requests in real time.
+Zenith includes a live **Blocked activity** page that displays blocked requests in real time.
 
 The logger can show:
 
@@ -179,6 +179,8 @@ The logger can show:
 * Search and type filtering
 
 The v1.3.2 logger and dashboard UI include cleaner spacing, system fonts, better blocked-request visibility, hover URL expansion, and CSP-safe local styling.
+
+> How it works: Zenith observes which requests its own rules blocked using Chrome's `webRequest` API in observe-only mode (requests that fail with `net::ERR_BLOCKED_BY_CLIENT`). This works in the **published Web Store build**, not just when unpacked — so counts, top blocked domains, the category breakdown and the live feed all populate for real users, and the toolbar badge shows live per-tab counts. Everything is counted and stored on your device; nothing is uploaded. The one honest limit: only blocked requests are observed, so there is no full log of *allowed* requests the way uBlock Origin (MV2) offers.
 
 ---
 
@@ -207,7 +209,7 @@ Updated UI areas:
 * Popup interface
 * Dashboard interface
 * Recent Blocked Requests panel
-* Network Logger interface
+* Blocked activity interface
 * Version labels
 * Typography
 * Spacing
@@ -254,7 +256,7 @@ Content scripts receive only the minimum data needed. For whitelist checks, cont
 | Per-site settings      | `chrome.storage.local`                         | Saves domain-specific controls |
 | Block counters         | `chrome.storage.local`                         | Shows blocking statistics      |
 | Since-install counter  | `chrome.storage.local` / `chrome.storage.sync` | Preserves long-term count      |
-| Blocked request logs   | `chrome.storage.local`                         | Powers the Network Logger      |
+| Blocked request logs   | `chrome.storage.local`                         | Powers the Blocked activity page (blocks observed via `webRequest`) |
 | Filter list settings   | `chrome.storage.local`                         | Saves enabled/disabled lists   |
 
 ---
@@ -270,7 +272,7 @@ Zenith uses several layers of protection:
    Converts supported filter rules into Chrome DNR rules.
 
 3. **Cosmetic filtering**
-   Injects safe CSS selectors to hide ads, banners, sponsored cards, and annoying elements.
+   Applies safe CSS selectors as a user stylesheet (via `scripting.insertCSS`) to hide ads, banners, sponsored cards, and annoying elements. The page cannot read or remove them.
 
 4. **Content script protection**
    Runs page-level privacy and annoyance protections.
@@ -292,7 +294,7 @@ Zenith is not a full replacement for long-established blockers yet, but it is de
 
 Mature blockers such as uBlock Origin, AdGuard, Ghostery, AdBlock Plus, Privacy Badger, and Brave Shields have years of real-world testing, large user bases, and wider filter compatibility. Zenith is a newer project focused on learning, privacy-first design, Chrome MV3 compatibility, and transparent local control.
 
-| Feature / Area            | Zenith v1.3.2 |   uBlock Origin   | uBlock Origin Lite |     AdGuard    |    Ghostery    |  AdBlock Plus  |    Privacy Badger   |     Brave Shields     |
+| Feature / Area            | Zenith v1.3.3 |   uBlock Origin   | uBlock Origin Lite |     AdGuard    |    Ghostery    |  AdBlock Plus  |    Privacy Badger   |     Brave Shields     |
 | ------------------------- | :-----------: | :---------------: | :----------------: | :------------: | :------------: | :------------: | :-----------------: | :-------------------: |
 | Chrome MV3 support        |       ✅       |         ⚠️        |          ✅         |        ✅       |        ✅       |        ✅       |          ✅          |        Built-in       |
 | Network ad blocking       |       ✅       |         ✅         |          ✅         |        ✅       |        ✅       |        ✅       |          ⚠️         |           ✅           |
@@ -309,7 +311,7 @@ Mature blockers such as uBlock Origin, AdGuard, Ghostery, AdBlock Plus, Privacy 
 | Advanced filter syntax    |    Partial    |      Advanced     |   Limited by MV3   |    Advanced    |     Medium     |     Medium     |          ❌          |         Medium        |
 | Dynamic filtering         |    Planned    |      Advanced     |       Limited      |     Medium     |        ❌       |        ❌       |          ❌          |           ❌           |
 | Per-site controls         |       ✅       |         ✅         |          ✅         |        ✅       |        ✅       |        ✅       |          ✅          |           ✅           |
-| Live network logger       |       ✅       |         ✅         |          ❌         |        ✅       |       ⚠️       |        ❌       |          ❌          |           ❌           |
+| Live blocked-activity view|       ✅       |         ✅         |          ❌         |        ✅       |       ⚠️       |        ❌       |          ❌          |           ❌           |
 | Dashboard statistics      |       ✅       |      Minimal      |       Minimal      |        ✅       |        ✅       |       ⚠️       |          ❌          |  Built-in browser UI  |
 | Local-only settings       |       ✅       |         ✅         |          ✅         |        ✅       |       ⚠️       |       ⚠️       |          ✅          |           ✅           |
 | Acceptable ads program    |       ❌       |         ❌         |          ❌         |        ❌       |        ❌       |        ✅       |          ❌          |           ❌           |
@@ -327,7 +329,7 @@ Before releasing a new version, test:
 2. Service worker starts correctly
 3. Popup opens
 4. Dashboard opens
-5. Network Logger opens
+5. Blocked activity page opens
 6. BBC or another news site loads without cosmetic rule errors
 7. YouTube loads without breaking the header or player
 8. Per-site ads OFF disables cosmetic CSS
@@ -338,6 +340,9 @@ Before releasing a new version, test:
 13. No CSP errors in extension pages
 14. No remote Google Fonts errors
 15. No temporary testing code remains
+16. Toggle OFF (popup/dashboard) stops network blocking, not just cosmetic hiding
+17. "Allow" on a site lets its requests through; other sites stay blocked
+18. Navigating directly to a blocked domain still loads (main_frame not blocked)
 ```
 
 ---
@@ -355,10 +360,36 @@ Zenith follows these project rules:
 * Filter lists are treated as text data, not executable code
 * Content scripts should receive only the minimum data needed
 * Sensitive dashboard data should only be available to extension pages
+* `chrome.storage` is locked to trusted contexts (`setAccessLevel`), so content scripts cannot read or write settings, the allowlist, or the fingerprint seed
+* Service-worker messages are deny-by-default: content scripts may send only the handful of message types they need
+* Scriptlet arguments are validated (safe value set, no `__proto__`/`prototype`/`constructor` paths) and injected as functions, never as code strings
 
 ---
 
 ## 📋 Changelog
+
+### v1.3.3
+
+#### Security
+
+* Locked `chrome.storage.local`/`sync` to trusted contexts so content scripts can no longer read or write settings, the whitelist, or the fingerprint seed.
+* Made service-worker messages deny-by-default; content scripts may send only the message types they need (settings, filter-list, and dashboard handlers are extension-page only).
+* Replaced string-built scriptlets with real functions injected via `chrome.scripting.executeScript`; validated arguments and blocked prototype-pollution paths. Works on sites with a strict CSP.
+* Tightened remote filter-list trust to exact URL prefixes and gave each list a rule policy (no scriptlets from remote lists; exceptions only from EasyList-family lists).
+* Removed small "extension is installed" tells (neutral injected-script attribute; cosmetic CSS applied as an unreadable user stylesheet).
+
+#### Fixed
+
+* The on/off switch and per-site "Allow" now stop network blocking too (via `allowAllRequests`), not just cosmetic hiding.
+* Dynamic rules no longer block top-level navigation, so links to listed domains load.
+* Redirect/allow rules are always installed (no longer dropped by the rule-count cap); filter-rule options like `$popup`/`$domain=` are handled correctly.
+* Alarms are only created when missing, so the 24 h filter-list update actually fires.
+* Badge falls back to Chrome's built-in blocked count in the packed build (the per-tab counter needs unpacked mode).
+* Fixed a `dashboard.css` rule that dropped the whitelist styling; corrected the dashboard logo colors; added the missing `network-logger.html`.
+
+#### Notes
+
+* Per-request detail (Top Domains, Category breakdown, Recent Requests) is populated from `onRuleMatchedDebug`, which Chrome provides only to unpacked extensions, so those panels are sparse in the published build. This is an MV3 limitation.
 
 ### v1.3.2
 
@@ -459,7 +490,7 @@ Please follow the project security rules:
 * Do not add inline scripts
 * Do not add unnecessary permissions
 * Do not add remote fonts
-* Test popup, dashboard, service worker, content scripts, and Network Logger before submitting changes
+* Test popup, dashboard, service worker, content scripts, and the Blocked activity page before submitting changes
 
 ---
 
@@ -469,11 +500,18 @@ See the `LICENSE` file for details.
 
 ---
 
+## 👥 Contributors
+
+- **roshanxcvi** — creator and maintainer
+- **Viraj Prajapati** — contributor
+
+---
+
 <div align="center">
 
 Made with ❤️ by **roshanxcvi**
 
-**Zenith AdBlocker v1.3.2 — Chrome MV3**
+**Zenith AdBlocker v1.3.3 — Chrome MV3**
 
 ⭐ Star the project if Zenith helps you browse with fewer ads and trackers.
 
