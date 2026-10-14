@@ -1,4 +1,4 @@
-// Zenith Network Logger — by roshanxcvi
+// Zenith Blocked activity — by roshanxcvi
 (function() {
   'use strict';
 
@@ -14,6 +14,7 @@
   let activeType = 'all';
   let searchQuery = '';
   let logData = [];
+  let detailed = true;
 
   filterBtns.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -41,8 +42,9 @@
   async function fetchLog() {
     try {
       const data = await chrome.runtime.sendMessage({ type: 'GET_DASHBOARD_DATA' });
-      if (data && data.blockedLog) {
-        logData = data.blockedLog;
+      if (data) {
+        detailed = data.detailedStats !== false;
+        logData = data.blockedLog || [];
         render();
         statUpdate.textContent = new Date().toLocaleTimeString();
       }
@@ -79,12 +81,16 @@
       const empty = document.createElement('div');
       empty.className = 'empty';
       const h2 = document.createElement('h2');
-      h2.textContent = logData.length === 0
-        ? 'Waiting for blocked requests...'
+      h2.textContent = (logData.length === 0 && !detailed)
+        ? 'Blocking is active'
+        : logData.length === 0
+        ? 'No blocked requests yet'
         : 'No requests match your filter';
       const p = document.createElement('p');
-      p.textContent = logData.length === 0
-        ? 'Browse the web in another tab and blocked requests will appear here live.'
+      p.textContent = (logData.length === 0 && !detailed)
+        ? 'Per-tab block counts are shown on the toolbar badge.'
+        : logData.length === 0
+        ? 'Browse the web in another tab and blocked requests will appear here live. Everything is counted on your device \u2014 nothing is uploaded.'
         : 'Try changing the search query or selecting a different type.';
       empty.appendChild(h2);
       empty.appendChild(p);
