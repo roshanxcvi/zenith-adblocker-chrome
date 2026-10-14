@@ -9,6 +9,15 @@
  * - Prevents huge filter lists from filling chrome.storage.local
  * - Adds clearCache() helper for dashboard cache cleanup
  *
+ * v1.3.3 AUDIT FIXES:
+ * - Each list has a rule policy (see LIST_POLICIES). Remote lists can never
+ *   add scriptlets; only EasyList-family lists may add @@ exceptions; plain
+ *   domain lists may only add ||domain^ blocks.
+ * - init() copies only known state fields from storage, so a stored value
+ *   can't replace a list's URL or policy.
+ * - A fetch that ends on a host outside the allowlist (after redirects) is
+ *   refused.
+ *
  * v1.1 SECURITY HARDENING:
  * - URL origin allowlist (no fetching from arbitrary URLs)
  * - HTTPS-only enforcement
@@ -25,6 +34,7 @@
 import {
   sanitizeFilterList,
   isTrustedFilterUrl,
+  TRUSTED_FILTER_ORIGINS,
   hashFilterList,
   logError,
   MAX_LIST_BYTES,
@@ -139,6 +149,41 @@ export const FILTER_LISTS = {
   },
 };
 
+// What each list is allowed to add. Remote lists never get scriptlets.
+const POLICY_FULL = Object.freeze({ allowScriptlets: false, allowExceptions: true, domainsOnly: false });
+const POLICY_BLOCK_ONLY = Object.freeze({ allowScriptlets: false, allowExceptions: false, domainsOnly: false });
+const POLICY_DOMAINS = Object.freeze({ allowScriptlets: false, allowExceptions: false, domainsOnly: true });
+
+export const LIST_POLICIES = Object.freeze({
+  easylist: POLICY_FULL,
+  easyprivacy: POLICY_FULL,
+  fanboy_annoyance: POLICY_FULL,
+  easylist_cookie: POLICY_FULL,
+  adblock_warning: POLICY_FULL,
+  malware_domains: POLICY_BLOCK_ONLY,
+  peterlowe: POLICY_DOMAINS,
+  oisd_small: POLICY_DOMAINS,
+  disconnect_tracking: POLICY_DOMAINS,
+  goodbyeads: POLICY_DOMAINS,
+  hagezi_pro_mini: POLICY_DOMAINS,
+});
+
+export function getListPolicy(id) {
+  return LIST_POLICIES[id] || POLICY_DOMAINS;
+}
+
+// Only these fields are ever read back from storage.
+function pickSavedState(state) {
+  const s = state && typeof state === 'object' ? state : {};
+  return {
+    enabled: typeof s.enabled === 'boolean' ? s.enabled : undefined,
+    lastUpdated: Number.isFinite(s.lastUpdated) ? s.lastUpdated : null,
+    ruleCount: Number.isFinite(s.ruleCount) ? s.ruleCount : 0,
+    contentHash: typeof s.contentHash === 'string' ? s.contentHash : null,
+    droppedLines: Number.isFinite(s.droppedLines) ? s.droppedLines : 0,
+  };
+}
+
 // Fetch timeout in ms
 const FETCH_TIMEOUT = 10000;
 
@@ -218,10 +263,15 @@ export class FilterListManager {
       if (saved.filterLists) {
         for (const [id, state] of Object.entries(saved.filterLists)) {
           if (FILTER_LISTS[id]) {
+            const saved = pickSavedState(state);
             this.lists[id] = {
               ...FILTER_LISTS[id],
               id,
-              ...state,
+              enabled: saved.enabled ?? FILTER_LISTS[id].enabled,
+              lastUpdated: saved.lastUpdated,
+              ruleCount: saved.ruleCount,
+              contentHash: saved.contentHash,
+              droppedLines: saved.droppedLines,
             };
           }
         }
@@ -356,6 +406,13 @@ export class FilterListManager {
         throw new Error(`HTTP ${resp.status}`);
       }
 
+      // Redirects must stay on an allowlisted host.
+      let finalHost = '';
+      try { finalHost = new URL(resp.url || list.url).hostname; } catch (e) {}
+      if (resp.url && (new URL(resp.url).protocol !== 'https:' || !TRUSTED_FILTER_ORIGINS.has(finalHost))) {
+        throw new Error(`redirected to untrusted host ${finalHost}`);
+      }
+
       let text = await resp.text();
 
       // Convert hosts/domain lists into AdBlock style rules.
@@ -370,7 +427,7 @@ export class FilterListManager {
       }
 
       // Sanitize before using/storing.
-      const { text: cleanText, dropped } = sanitizeFilterList(text);
+      const { text: cleanText, dropped } = sanitizeFilterList(text, getListPolicy(id));
 
       if (dropped > 0) {
         console.warn(`[FilterListManager] ${list.name}: dropped ${dropped} suspicious lines during sanitization`);
