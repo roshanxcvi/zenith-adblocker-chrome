@@ -56,8 +56,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Get current tab
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   let domain = '—';
-  try { domain = new URL(tab.url).hostname; } catch (e) {}
-  currentDomain.textContent = domain;
+  let isWebPage = false;
+  try {
+    const u = new URL(tab.url);
+    domain = u.hostname;
+    isWebPage = (u.protocol === 'http:' || u.protocol === 'https:') && !!u.hostname;
+  } catch (e) {}
+  currentDomain.textContent = domain || '—';
+  // "Allow" only makes sense on normal web pages (not chrome://, file://, …)
+  if (!isWebPage) whitelistBtn.disabled = true;
 
   // Fetch popup overview data
   const data = await chrome.runtime.sendMessage({
@@ -107,8 +114,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   catSocial.textContent = cats.social;
   catOther.textContent = cats.other;
 
-  // Domain list
-  renderDomains(data.domains || []);
+  // Per-request detail (type breakdown + top domains) comes from our
+  // webRequest counter, which works in packed builds too. This guard only
+  // hides the two panels in the unlikely case that counter is unavailable,
+  // so they never render empty or misleading.
+  const detailed = data.detailedStats !== false;
+  if (!detailed) {
+    try { document.querySelector('.bar').closest('.block').style.display = 'none'; } catch (e) {}
+    try { domainList.closest('.block').style.display = 'none'; } catch (e) {}
+    const meta = document.querySelector('.hero-meta');
+    if (meta) meta.style.display = 'none';
+  } else {
+    // Domain list
+    renderDomains(data.domains || []);
+  }
 
   // Whitelist (M-A — dot-anchored suffix match instead of includes())
   const isWL = (data.whitelist || []).some(d => whitelistMatches(domain, d));
@@ -193,16 +212,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Whitelist
   whitelistBtn.addEventListener('click', async () => {
+    if (!isWebPage) return;
     if (whitelistBtn.classList.contains('active')) {
       const resp = await chrome.runtime.sendMessage({ type: 'REMOVE_WHITELIST', domain });
-      whitelistBtn.textContent = 'Whitelist';
+      whitelistBtn.textContent = 'Allow';
       whitelistBtn.classList.remove('active');
       if (resp && Array.isArray(resp.whitelist)) renderWhitelist(resp.whitelist);
     } else {
       const resp = await chrome.runtime.sendMessage({ type: 'ADD_WHITELIST', domain });
+      if (!resp || resp.error) return;   // e.g. invalid_domain
       whitelistBtn.textContent = 'Remove';
       whitelistBtn.classList.add('active');
-      if (resp && Array.isArray(resp.whitelist)) renderWhitelist(resp.whitelist);
+      if (Array.isArray(resp.whitelist)) renderWhitelist(resp.whitelist);
     }
   });
 
