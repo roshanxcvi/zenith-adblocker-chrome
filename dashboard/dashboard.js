@@ -126,9 +126,95 @@ function formatLogUrl(url, max = 90) {
     while (node.firstChild) node.removeChild(node.firstChild);
   }
 
+  // Per-request detail (domains / categories / live log) comes from
+  // onRuleMatchedDebug, which Chrome exposes only to unpacked extensions.
+  // In the published build we show genuinely useful panels (active protection,
+  // filter coverage, how protection works) instead of empty request lists.
+  let detailed = true;
+
+  function setCardTitle(contentEl, title, badge) {
+    const card = contentEl.closest('.card'); if (!card) return;
+    const h2 = card.querySelector('.card-header h2'); if (h2 && title) h2.textContent = title;
+    // Only touch the badge when a value is passed, so the real-data
+    // renderers (which set their own counts) can reset the title without
+    // wiping their badge.
+    if (badge !== undefined) { const b = card.querySelector('.card-badge'); if (b) b.textContent = badge || ''; }
+  }
+  const statusDot = (on) => el('span', { style: { width: '9px', height: '9px', 'border-radius': '50%',
+    'flex-shrink': '0', background: on ? 'var(--accent)' : 'var(--text-3)',
+    'box-shadow': on ? '0 0 0 3px var(--accent-bg)' : 'none' } });
+
+  function renderActiveProtection(pro) {
+    pro = pro || {};
+    const MODS = [
+      ['adBlocking', 'Ad & tracker blocking'],
+      ['fingerprintProtection', 'Fingerprint protection'],
+      ['cookieAutoReject', 'Cookie pop-up handling'],
+      ['annoyanceBlocking', 'Annoyance blocking'],
+      ['minerBlocking', 'Crypto-miner blocking'],
+      ['antiAdblock', 'Anti-adblock bypass'],
+    ];
+    const onCount = MODS.filter(([k]) => pro[k] !== false).length;
+    clearChildren(categoryList);
+    setCardTitle(categoryList, 'Active Protection', onCount + ' of ' + MODS.length + ' on');
+    for (const [k, label] of MODS) {
+      const on = pro[k] !== false;
+      categoryList.appendChild(el('div', { cls: 'cat-row' }, [
+        statusDot(on),
+        el('div', { cls: 'cat-info' }, [el('div', { cls: 'cat-name', text: label, style: { 'margin-bottom': '0' } })]),
+        el('div', { cls: 'cat-count', text: on ? 'On' : 'Off', style: { color: on ? 'var(--accent)' : 'var(--text-3)', 'font-size': '13px' } }),
+      ]));
+    }
+  }
+
+  function renderCoverage(data) {
+    const net = data.networkRuleCount || 0, cos = data.cosmeticRuleCount || 0;
+    const lists = (data.filterListStats && data.filterListStats.enabledLists) || 0;
+    clearChildren(domainList);
+    setCardTitle(domainList, 'Filter Coverage', '');
+    const rows = [
+      ['Active filter rules', fmt(net + cos)],
+      ['Network block rules', fmt(net)],
+      ['Cosmetic (hide) rules', fmt(cos)],
+      ['Enabled filter lists', String(lists)],
+    ];
+    for (const [label, val] of rows) {
+      domainList.appendChild(el('div', { cls: 'domain-row' }, [
+        el('span', { cls: 'domain-name', text: label }),
+        el('span', { cls: 'domain-count', text: val }),
+      ]));
+    }
+  }
+
+  function renderProtectionInfo() {
+    clearChildren(logList);
+    setCardTitle(logList, 'How protection works', '');
+    try {
+      const card = logList.closest('.card');
+      const dot = card.querySelector('.live-dot'); if (dot) dot.style.display = 'none';
+      const lbl = card.querySelector('.live-label'); if (lbl) lbl.style.display = 'none';
+    } catch (e) {}
+    const steps = [
+      ['1. Network blocking', 'Ad and tracker requests are blocked before they load, using Chrome\u2019s declarativeNetRequest engine.'],
+      ['2. Cosmetic filtering', 'Leftover ad containers and sponsored elements are hidden on the page.'],
+      ['3. Page protections', 'Fingerprinting defenses, cookie pop-up handling, and crypto-miner blocking run on each page.'],
+    ];
+    for (const [t, d] of steps) {
+      logList.appendChild(el('div', { cls: 'domain-row', style: { 'align-items': 'flex-start' } }, [
+        el('div', {}, [
+          el('div', { cls: 'cat-name', text: t, style: { 'margin-bottom': '3px' } }),
+          el('div', { cls: 'meta', text: d }),
+        ]),
+      ]));
+    }
+    logList.appendChild(el('div', { cls: 'meta', style: { 'margin-top': '12px', padding: '0 2px', 'line-height': '1.5' },
+      text: 'Live per-tab blocks appear on the toolbar badge. Blocked requests show up here and on the Blocked activity page as you browse.' }));
+  }
+
   // ——— RENDER FUNCTIONS ———
 
   function renderCategories(categories) {
+    setCardTitle(categoryList, 'Blocked by Category');
     const entries = Object.entries(categories).sort((a, b) => b[1] - a[1]);
     catCount.textContent = entries.length + ' types';
 
@@ -160,6 +246,7 @@ function formatLogUrl(url, max = 90) {
   }
 
   function renderDomains(topSites) {
+    setCardTitle(domainList, 'Top Blocked Domains');
     domainCount.textContent = topSites.length + ' domains';
     clearChildren(domainList);
 
@@ -181,6 +268,12 @@ function formatLogUrl(url, max = 90) {
   
 
 function renderLog(entries) {
+  setCardTitle(logList, 'Recent Blocked Requests');
+  try {
+    const card = logList.closest('.card');
+    const dot = card.querySelector('.live-dot'); if (dot) dot.style.display = '';
+    const lbl = card.querySelector('.live-label'); if (lbl) lbl.style.display = '';
+  } catch (e) {}
   clearChildren(logList);
 
   const safeEntries = Array.isArray(entries) ? entries : [];
@@ -335,13 +428,20 @@ function renderLog(entries) {
       if (!data || data.error) return;
 
       // Toggle state
+      detailed = data.detailedStats !== false;
       masterToggle.checked = !!data.enabled;
       updateToggleUI(!!data.enabled);
 
       // Hero stats — defensive defaults for every field
       statTotal.textContent = fmt(data.totalBlocked || 0);
       statRules.textContent = fmt((data.networkRuleCount || 0) + (data.cosmeticRuleCount || 0));
-      statSites.textContent = fmt((data.topSites || []).length);
+      if (detailed) {
+        statSites.textContent = fmt((data.topSites || []).length);
+      } else {
+        statSites.textContent = String((data.filterListStats && data.filterListStats.enabledLists) || 0);
+        const lbl = document.querySelector('.stat-sites .stat-label');
+        if (lbl) lbl.textContent = 'Filter Lists On';
+      }
       statWhitelistCount.textContent = (data.whitelist || []).length;
 
       // Since install banner
@@ -356,10 +456,21 @@ function renderLog(entries) {
         }
       }
 
-      // Sections — pass safe defaults so renderers never crash
-      renderCategories(data.categories || {});
-      renderDomains(data.topSites || []);
-      renderLog(data.blockedLog || []);
+      // Show real blocked data once there's any; until then (or if the
+      // webRequest counter is somehow unavailable) show the always-valid
+      // protection overview so the dashboard is never bleakly empty.
+      const hasData = (data.totalBlocked || 0) > 0 ||
+                      (data.topSites || []).length > 0 ||
+                      (data.blockedLog || []).length > 0;
+      if (detailed && hasData) {
+        renderCategories(data.categories || {});
+        renderDomains(data.topSites || []);
+        renderLog(data.blockedLog || []);
+      } else {
+        renderActiveProtection(data.proSettings);
+        renderCoverage(data);
+        renderProtectionInfo();
+      }
       renderWhitelist(data.whitelist || []);
       renderFilterLists(data.filterLists || []);
     } catch (err) {
