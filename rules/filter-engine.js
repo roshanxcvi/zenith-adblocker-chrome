@@ -2,18 +2,33 @@
  * Filter Engine — parses AdBlock-style filter lists
  * and provides matching methods for URLs and elements.
  *
- * v1.2hardening:
+ * v1.2 hardening:
  *   M-D: try/catch around `new RegExp` so one malformed pattern doesn't
  *        lose all subsequent rules
- *   FE-3: cosmetic filter domain match is now dot-anchored suffix, not
- *         substring (so a filter for 'example.com' doesn't accidentally
- *         apply to 'notexample.com' or 'example.com.attacker.com')
- *   FE-8: exception rules now check resourceTypes too
+ *   FE-3: cosmetic filter domain match is dot-anchored suffix, not substring
+ *   FE-8: exception rules check resourceTypes too
  *   H-C: shouldBlock honors a real resourceType arg
+ *
+ * v1.3.3 audit fixes:
+ *   FE-9  Rules with options Zenith can't enforce ($popup, $csp, $redirect,
+ *         $removeparam, $document, $elemhide, ...) are skipped. Before, the
+ *         option was ignored and the rule became a plain block, e.g.
+ *         ||site.com^$popup blocked site.com entirely.
+ *   FE-10 $domain= and $third-party / $first-party are kept (DNR can enforce
+ *         them). Before they were dropped, so site-specific rules applied on
+ *         every site.
+ *   FE-11 Cosmetic "~domain" means "not on this domain". It was treated as
+ *         "only on this domain" (the ~ was stripped), which inverted rules.
+ *   FE-12 #@#, #?#, #$#, #%#, $$ and ##^ lines are skipped. Before they fell
+ *         through to the network parser and became junk DNR rules that used
+ *         up the 5,000-rule budget.
+ *   FE-13 scriptletRules has no prototype (a "__proto__" domain can't reach
+ *         Object.prototype); reset() clears scriptlets and procedural
+ *         filters too, so list updates don't pile up duplicates.
+ *   FE-14 URL regexes are compiled lazily; only CHECK_URL uses them, so the
+ *         service worker no longer compiles every rule on each start.
  */
 
-// Cheap local helpers — avoids creating a hard dependency on security.js
-// since this module is also imported into the engine directly.
 function _logBadRule(where, line, err) {
   try {
     self.__zenithErrorCount = (self.__zenithErrorCount || 0) + 1;
@@ -26,98 +41,131 @@ function _logBadRule(where, line, err) {
   } catch (_) {}
 }
 
-// FE-3 — dot-anchored suffix match for cosmetic filter domains.
-// 'example.com' matches 'example.com' and 'sub.example.com'.
-// Does NOT match 'notexample.com' or 'example.com.attacker.com'.
 function _domainMatches(hostname, ruleDomain) {
   if (!hostname || !ruleDomain) return false;
   const h = String(hostname).toLowerCase().replace(/^www\./, '');
-  const r = String(ruleDomain).toLowerCase().replace(/^~/, '').replace(/^www\./, '');
+  const r = String(ruleDomain).toLowerCase().replace(/^www\./, '');
   if (!r) return false;
   return h === r || h.endsWith('.' + r);
 }
 
+// Lowercase ASCII hostname, as DNR requires. No wildcards / entities.
+const DNR_DOMAIN = /^(?:[a-z0-9-]+\.)*[a-z0-9-]+$/;
+
+const TYPE_OPTIONS = {
+  script: 'script',
+  image: 'image',
+  stylesheet: 'stylesheet',
+  xmlhttprequest: 'xmlhttprequest',
+  xhr: 'xmlhttprequest',
+  subdocument: 'sub_frame',
+  sub_frame: 'sub_frame',
+  frame: 'sub_frame',
+  media: 'media',
+  ping: 'ping',
+  beacon: 'ping',
+  font: 'font',
+  object: 'object',
+  websocket: 'websocket',
+  other: 'other',
+};
+
+// Unsupported cosmetic / snippet syntaxes: #@#, #?#, #$#, #%#, #@?#, #@$#, $$, ##^
+const UNSUPPORTED_SYNTAX = /#[@?$%]+#|\$\$|##\^/;
+
+function splitDomains(list) {
+  const include = [];
+  const exclude = [];
+  for (const raw of String(list || '').split(',')) {
+    const d = raw.trim().toLowerCase();
+    if (!d) continue;
+    if (d.startsWith('~')) exclude.push(d.slice(1));
+    else include.push(d);
+  }
+  return { include, exclude };
+}
+
 export class FilterEngine {
   constructor() {
+    this.reset();
+  }
+
+  reset() {
     this.networkFilters = [];
     this.cosmeticFilters = [];
     this.exceptions = [];
-    this.scriptletRules = {};      // { hostname: [{name, args}, ...] }
-    this.proceduralFilters = [];   // [{host, selector}, ...]
+    this.scriptletRules = Object.create(null);   // { hostname: [{name, args}, ...] }
+    this.proceduralFilters = [];                 // [{host, selector}, ...]
   }
 
   /**
    * Parse a raw filter list string into structured rules.
    */
   parse(rawText) {
-    const lines = rawText.split('\n');
+    const lines = String(rawText || '').split('\n');
 
     for (let line of lines) {
       try {
         line = line.trim();
 
-        // Skip comments and empty lines
         if (!line || line.startsWith('!') || line.startsWith('[')) continue;
+        if (UNSUPPORTED_SYNTAX.test(line)) continue;
 
-        // Exception rules (whitelist)
         if (line.startsWith('@@')) {
           const rule = this._buildNetworkRule(line.slice(2));
           if (rule) this.exceptions.push(rule);
           continue;
         }
 
-        // SCRIPTLET RULES — example.com##+js(set-constant, ads.loaded, true)
         if (line.includes('##+js(')) {
           this._parseScriptletRule(line);
           continue;
         }
 
-        // PROCEDURAL COSMETIC FILTERS
         if (line.includes('##') && /:has-text\(|:upward\(|:matches-css\(|:min-text-length\(|:remove\(/.test(line)) {
-          const [domains, selector] = line.split('##');
+          const idx = line.indexOf('##');
+          const domains = line.slice(0, idx);
+          const selector = line.slice(idx + 2);
           if (!selector) continue;
           const hosts = domains ? domains.split(',') : [''];
           for (const h of hosts) {
-            this.proceduralFilters.push({ host: h.trim(), selector });
+            this.proceduralFilters.push({ host: h.trim().toLowerCase(), selector });
           }
           continue;
         }
 
-        // Cosmetic filters (element hiding)
         if (line.includes('##')) {
-          const [domains, selector] = line.split('##');
+          const idx = line.indexOf('##');
+          const selector = line.slice(idx + 2);
           if (!selector) continue;
-          this.cosmeticFilters.push({
-            domains: domains ? domains.split(',').map(d => d.trim()).filter(Boolean) : [],
-            selector,
-          });
+          const { include, exclude } = splitDomains(line.slice(0, idx));
+          this.cosmeticFilters.push({ domains: include, excludeDomains: exclude, selector });
           continue;
         }
 
-        // Network filters
+        // Anything else containing '#' is a syntax we don't understand.
+        if (line.includes('#')) continue;
+
         const rule = this._buildNetworkRule(line);
         if (rule) this.networkFilters.push(rule);
       } catch (e) {
         _logBadRule('parse', line, e);
-        // Keep going — one bad rule must not kill the whole list
       }
     }
   }
 
-  /**
-   * Parse a scriptlet rule like: example.com##+js(set-constant, name, value)
-   */
   _parseScriptletRule(line) {
     try {
       const parts = line.split('##+js(');
       if (parts.length !== 2) return;
-      const domains = parts[0] ? parts[0].split(',').map(d => d.trim()).filter(Boolean) : ['*'];
-      const argsRaw = parts[1].replace(/\)\s*$/, ''); // strip trailing )
+      const domains = parts[0] ? parts[0].split(',').map(d => d.trim().toLowerCase()).filter(Boolean) : ['*'];
+      const argsRaw = parts[1].replace(/\)\s*$/, '');
       const argParts = argsRaw.split(',').map(s => s.trim());
       const name = argParts[0];
       if (!name) return;
       const scriptlet = { name, args: argParts.slice(1) };
       for (const host of domains) {
+        if (host.startsWith('~')) continue;   // exclusions not supported: skip rather than misapply
         const key = host || '*';
         if (!this.scriptletRules[key]) this.scriptletRules[key] = [];
         this.scriptletRules[key].push(scriptlet);
@@ -128,57 +176,54 @@ export class FilterEngine {
   }
 
   /**
-   * Convert a filter pattern to a regex-based rule object.
-   * M-D — returns null on regex compilation failure rather than throwing,
-   * so the caller can skip the rule and continue with the rest.
+   * Parse "pattern$options" into a rule the DNR converter can enforce, or
+   * null if it uses an option we can't honor.
    */
   _buildNetworkRule(pattern) {
     try {
-      let isThirdParty = false;
-      let resourceTypes = [];
+      let domainType = null;
+      const resourceTypes = [];
+      const excludedResourceTypes = [];
+      let initiatorDomains = [];
+      let excludedInitiatorDomains = [];
 
-      // Handle options after $
-      if (pattern.includes('$')) {
-        const [rawPattern, options] = pattern.split('$');
-        pattern = rawPattern;
+      const dollar = pattern.lastIndexOf('$');
+      // "/ads$/" is a regex ending in $, not an options separator.
+      const dollarInRegex = pattern.startsWith('/') && pattern.endsWith('/') && dollar === pattern.length - 2;
+      if (dollar > 0 && !dollarInRegex) {
+        const options = pattern.slice(dollar + 1);
+        pattern = pattern.slice(0, dollar);
 
-        for (const opt of options.split(',')) {
-          if (opt === 'third-party') isThirdParty = true;
-          if (opt === 'script') resourceTypes.push('script');
-          if (opt === 'image') resourceTypes.push('image');
-          if (opt === 'stylesheet') resourceTypes.push('stylesheet');
-          if (opt === 'xmlhttprequest') resourceTypes.push('xmlhttprequest');
-          if (opt === 'sub_frame' || opt === 'subdocument') resourceTypes.push('sub_frame');
-          if (opt === 'media') resourceTypes.push('media');
-          if (opt === 'ping') resourceTypes.push('ping');
-          if (opt === 'font') resourceTypes.push('font');
-          if (opt === 'other') resourceTypes.push('other');
+        for (const raw of options.split(',')) {
+          const opt = raw.trim().toLowerCase();
+          if (!opt || opt === 'match-case' || opt === 'important') continue;
+          if (opt === 'third-party' || opt === '3p') { domainType = 'thirdParty'; continue; }
+          if (opt === 'first-party' || opt === '1p' || opt === '~third-party') { domainType = 'firstParty'; continue; }
+          if (opt.startsWith('domain=')) {
+            const { include, exclude } = splitDomains(opt.slice(7).replace(/\|/g, ','));
+            if (![...include, ...exclude].every(d => DNR_DOMAIN.test(d))) return null;
+            initiatorDomains = include;
+            excludedInitiatorDomains = exclude;
+            continue;
+          }
+          const neg = opt.startsWith('~');
+          const type = TYPE_OPTIONS[neg ? opt.slice(1) : opt];
+          if (type) { (neg ? excludedResourceTypes : resourceTypes).push(type); continue; }
+          return null;   // popup, csp, redirect, removeparam, document, ... — can't enforce
         }
       }
 
-      // Refuse trivially-short patterns (nothing left after $)
       if (!pattern || pattern.length < 2) return null;
-
-      // Convert AdBlock pattern to regex
-      let regex = pattern
-        .replace(/\*\*/g, '*')                       // collapse double wildcards
-        .replace(/[.+?{}()[\]\\]/g, '\\$&')          // escape regex specials
-        .replace(/\*/g, '.*')                         // wildcard → .*
-        .replace(/\^/g, '([^a-zA-Z0-9_.%-]|$)');     // separator char
-
-      // Handle domain anchoring ||
-      if (regex.startsWith('||')) {
-        regex = '(^https?://([a-z0-9-]+\\.)*?)' + regex.slice(2);
-      }
-
-      // M-D — try/catch the actual compile
-      const compiled = new RegExp(regex, 'i');
 
       return {
         pattern,
-        regex: compiled,
-        isThirdParty,
+        regex: null,   // compiled on first use by shouldBlock()
+        isThirdParty: domainType === 'thirdParty',
+        domainType,
         resourceTypes,
+        excludedResourceTypes,
+        initiatorDomains,
+        excludedInitiatorDomains,
       };
     } catch (e) {
       _logBadRule('buildNetworkRule', pattern, e);
@@ -186,59 +231,63 @@ export class FilterEngine {
     }
   }
 
+  _regexFor(rule) {
+    if (rule.regex !== null) return rule.regex;
+    try {
+      let regex = rule.pattern
+        .replace(/\*\*/g, '*')
+        .replace(/[.+?{}()[\]\\]/g, '\\$&')
+        .replace(/\*/g, '.*')
+        .replace(/\^/g, '([^a-zA-Z0-9_.%-]|$)');
+      if (regex.startsWith('||')) {
+        regex = '(^https?://([a-z0-9-]+\\.)*?)' + regex.slice(2);
+      }
+      rule.regex = new RegExp(regex, 'i');
+    } catch (e) {
+      _logBadRule('buildNetworkRule', rule.pattern, e);
+      rule.regex = false;
+    }
+    return rule.regex;
+  }
+
   /**
-   * Check if a URL should be blocked.
-   * H-C — resourceType is now used meaningfully. If the caller doesn't
-   * provide one, type-restricted rules are SKIPPED (not matched) so we
-   * err on the side of "don't block" rather than "block everything".
-   * FE-8 — exception rules ALSO check resourceTypes.
+   * Check if a URL should be blocked (used by the CHECK_URL message).
    */
   shouldBlock(url, sourceUrl = '', resourceType = '') {
     if (!url) return false;
 
-    // Check exception rules first
-    for (const rule of this.exceptions) {
-      if (!rule || !rule.regex.test(url)) continue;
-      // If exception is type-restricted and we know the type, only match
-      // when the type lines up.
+    const matches = (rule) => {
+      const re = this._regexFor(rule);
+      if (!re || !re.test(url)) return false;
       if (rule.resourceTypes.length > 0) {
-        if (!resourceType) continue; // unknown type — can't trust the exception
-        if (!rule.resourceTypes.includes(resourceType)) continue;
+        if (!resourceType || !rule.resourceTypes.includes(resourceType)) return false;
       }
-      return false;
-    }
-
-    // Check block rules
-    for (const rule of this.networkFilters) {
-      if (!rule || !rule.regex.test(url)) continue;
-      if (rule.resourceTypes.length > 0) {
-        if (!resourceType) continue; // unknown type → conservative: skip type-restricted
-        if (!rule.resourceTypes.includes(resourceType)) continue;
-      }
+      if (resourceType && rule.excludedResourceTypes.includes(resourceType)) return false;
       return true;
-    }
+    };
 
+    for (const rule of this.exceptions) {
+      if (rule && matches(rule)) return false;
+    }
+    for (const rule of this.networkFilters) {
+      if (rule && matches(rule)) return true;
+    }
     return false;
   }
 
   /**
-   * Get CSS selectors to hide for a given hostname.
-   * FE-3 — domain match is now proper suffix matching, not substring.
+   * CSS selectors to hide for a hostname.
+   * Applies when the host isn't excluded, and either the rule has no
+   * domain list or the host matches one of its domains.
    */
   getCosmeticSelectors(hostname) {
     const selectors = [];
     for (const filter of this.cosmeticFilters) {
       if (!filter || !filter.selector) continue;
-      if (filter.domains.length === 0) {
-        // Global selector
+      const exclude = filter.excludeDomains || [];
+      if (exclude.some(d => _domainMatches(hostname, d))) continue;
+      if (filter.domains.length === 0 || filter.domains.some(d => _domainMatches(hostname, d))) {
         selectors.push(filter.selector);
-        continue;
-      }
-      for (const d of filter.domains) {
-        if (_domainMatches(hostname, d)) {
-          selectors.push(filter.selector);
-          break;
-        }
       }
     }
     return selectors;
