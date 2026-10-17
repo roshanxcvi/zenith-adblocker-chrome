@@ -10,7 +10,11 @@
 ![Chrome](https://img.shields.io/badge/Chrome-MV3-4285F4?style=for-the-badge\&logo=google-chrome\&logoColor=white)
 ![Privacy](https://img.shields.io/badge/privacy-local--first-00e676?style=for-the-badge)
 
+[![Available in the Chrome Web Store](https://img.shields.io/badge/Chrome%20Web%20Store-Add%20to%20Chrome-00e676?style=for-the-badge&logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/zenith-adblocker-%E2%80%94-ad-blo/eakononkmmopglmbeckclomenajendjo)
+
 Zenith is a Chrome Manifest V3 privacy-focused ad blocker with network blocking, cosmetic filtering, tracker protection, fingerprint protection, cookie popup handling, per-site controls, local dashboard analytics, and local-only settings.
+
+### ⬇️ [Install Zenith from the Chrome Web Store](https://chromewebstore.google.com/detail/zenith-adblocker-%E2%80%94-ad-blo/eakononkmmopglmbeckclomenajendjo)
 
 </div>
 
@@ -28,6 +32,20 @@ Zenith is inspired by mature privacy tools such as uBlock Origin, AdGuard, Ghost
 
 ## 📥 Installation
 
+### ✅ Recommended — Chrome Web Store
+
+**[→ Add Zenith to Chrome](https://chromewebstore.google.com/detail/zenith-adblocker-%E2%80%94-ad-blo/eakononkmmopglmbeckclomenajendjo)**
+
+1. Open the [Chrome Web Store listing](https://chromewebstore.google.com/detail/zenith-adblocker-%E2%80%94-ad-blo/eakononkmmopglmbeckclomenajendjo).
+2. Click **Add to Chrome**, then **Add extension**.
+3. The Zenith star icon appears in your toolbar — done.
+
+Works on Chrome, Edge, Brave and other Chromium browsers.
+
+---
+
+> **Developer / manual install** — the methods below load the source directly. Most users should install from the Chrome Web Store above.
+
 ### Method 1 — Download ZIP
 
 1. Download the Zenith project ZIP.
@@ -42,7 +60,7 @@ chrome://extensions/
 5. Turn ON **Developer mode**.
 6. Click **Load unpacked**.
 7. Select the unzipped Zenith folder.
-8. The Zenith shield icon should appear in your Chrome toolbar.
+8. The Zenith star icon should appear in your Chrome toolbar.
 
 ### Method 2 — Clone from GitHub
 
